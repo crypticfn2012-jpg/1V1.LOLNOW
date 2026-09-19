@@ -384,6 +384,25 @@ h3{font-size:13px}
     if(window.ONEVONE_REAL_AUTH)return window.ONEVONE_REAL_AUTH;
     return firebase.auth();
   }
+
+  function getGameApiOrigin(){
+    if(window.ONEVONE_GAME_API_ORIGIN)return window.ONEVONE_GAME_API_ORIGIN;
+    try{
+      var scripts=document.getElementsByTagName("script");
+      for(var i=0;i<scripts.length;i++){
+        var src=scripts[i].src||"";
+        if(src.indexOf("server-mock.js")!==-1){
+          window.ONEVONE_GAME_API_ORIGIN=new URL(src,window.location.href).origin;
+          return window.ONEVONE_GAME_API_ORIGIN;
+        }
+      }
+    }catch(e){}
+    return window.location.origin;
+  }
+
+  function gameApiUrl(path){
+    return getGameApiOrigin()+path;
+  }
   var configured=!!(window.ONEVONE_FIREBASE_READY || (window.ONEVONE_FIREBASE_CONFIG&&window.ONEVONE_FIREBASE_CONFIG.apiKey&&!String(window.ONEVONE_FIREBASE_CONFIG.apiKey).startsWith("YOUR_")));
   try{
     window.ONEVONE_AUTH_TOKEN=window.ONEVONE_AUTH_TOKEN||localStorage.getItem("onevone.authToken")||"";
@@ -517,8 +536,15 @@ h3{font-size:13px}
         var realUser=getRealAuth().currentUser;
         if(realUser&&!realUser.isAnonymous){
           return ensureGameSession(realUser)
-            .then(function(){
+            .then(function(session){
               try{
+                if(mockAuth.currentUser){
+                  mockAuth.currentUser.uid=session.googleId||realUser.uid;
+                  mockAuth.currentUser.displayName=session.player&&session.player.display_name||realUser.displayName||"Player";
+                  mockAuth.currentUser.email=realUser.email||"";
+                  mockAuth.currentUser.isAnonymous=false;
+                  mockAuth.currentUser.getIdToken=function(){return Promise.resolve(session.token);};
+                }
                 return {user:mockAuth.currentUser};
               }catch(e){
                 return {user:realUser};
@@ -551,7 +577,7 @@ h3{font-size:13px}
 
     if(Object.keys(update).length){
       try{
-        var response=await fetch("/api/player/save",{
+        var response=await fetch(gameApiUrl("/api/player/save"),{
           method:"POST",
           headers:{"Content-Type":"application/json"},
           body:JSON.stringify(update)
@@ -616,7 +642,7 @@ h3{font-size:13px}
       display_name:username
     };
 
-    var response=await fetch("/api/auth/google",{
+    var response=await fetch(gameApiUrl("/api/auth/google"),{
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify(payload)
@@ -659,6 +685,18 @@ h3{font-size:13px}
     }));
 
     console.log("[1V1.LOLNOW] Game session established for "+(data.player.display_name||username));
+
+    try{
+      var mockAuth=window.firebase&&typeof window.firebase.auth==="function"?window.firebase.auth():null;
+      if(mockAuth&&mockAuth.currentUser){
+        mockAuth.currentUser.uid=data.player.google_id||googleId;
+        mockAuth.currentUser.displayName=data.player.display_name||username;
+        mockAuth.currentUser.email=user.email||"";
+        mockAuth.currentUser.isAnonymous=false;
+        mockAuth.currentUser.getIdToken=function(){return Promise.resolve(data.token);};
+      }
+    }catch(e){}
+
     installMockAuthBridge();
     await syncGamePlayerProfile();
     return window.ONEVONE_GAME_SESSION;
@@ -1452,7 +1490,7 @@ h3{font-size:13px}
     try{
       if(state.profileUnsubscribe)state.profileUnsubscribe();
       if(state.leaderboardUnsubscribe)state.leaderboardUnsubscribe();
-      try{await fetch("/api/auth/logout",{method:"POST"});}catch(e){}
+      try{await fetch(gameApiUrl("/api/auth/logout"),{method:"POST"});}catch(e){}
       window.ONEVONE_GAME_SESSION=null;
       try{
         localStorage.removeItem("1v1_session_token");
@@ -1469,6 +1507,7 @@ h3{font-size:13px}
   }
 
   document.addEventListener("DOMContentLoaded",function(){
+    getGameApiOrigin();
     $("loginTab").onclick=function(){switchMode("login");};
     $("signupTab").onclick=function(){switchMode("signup");};
 
