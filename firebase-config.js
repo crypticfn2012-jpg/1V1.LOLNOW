@@ -1,15 +1,23 @@
-// Firebase configuration for 1V1.LOLNOW.
-// Replace the values below with your Firebase Web App config.
-// Firebase Console -> Project settings -> Your apps -> Web app.
-//
-// This file is safe to publish. Never put a Firebase service-account
-// private key in this repository.
+<script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-analytics.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
 
-window.ONEVONE_FIREBASE_CONFIG = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.firebasestorage.app",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
-};
+  // Your web app's Firebase configuration
+  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+  const firebaseConfig = {
+    apiKey: "AIzaSyChQk1xyEQM5sT-xJMzF07I_bsqx6tkU1E",
+    authDomain: "v1-lolnow.firebaseapp.com",
+    projectId: "v1-lolnow",
+    storageBucket: "v1-lolnow.firebasestorage.app",
+    messagingSenderId: "473486188203",
+    appId: "1:473486188203:web:4e41f4b86d46a3143361ee",
+    measurementId: "G-PQXZBZDBVZ"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+</script>
