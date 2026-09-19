@@ -228,6 +228,7 @@ h3{font-size:13px}
     <div class="brand-copy"><strong>1v1.LOLNOW</strong><span>your account. your stats.</span></div>
   </div>
   <div class="actions">
+    <button class="btn glass" id="fullscreenButton" title="Fullscreen">Fullscreen</button>
     <button class="btn glass" id="profileButton">Profile</button>
     <button class="btn glass" id="leaderboardButton">Leaderboard</button>
     <button class="btn primary" id="accountButton">Account</button>
@@ -557,6 +558,11 @@ h3{font-size:13px}
 
     window.ONEVONE_GAME_PROFILE=entitlement;
     window.ONEVONE_ALL_SKINS_UNLOCKED=unlocked;
+    window.ONEVONE_ALL_MODES_UNLOCKED=true;
+    window.ONEVONE_ENABLED_MODES=[
+      "1v1","1v1 Clash","Battle Royale","Zone Wars","Box Fight","Box Fight 2v2",
+      "Deathmatch","Zombies","Build Race","Practice","Aim Trainer","Bots","Custom"
+    ];
 
     var payload=JSON.stringify(entitlement);
     try{
@@ -566,6 +572,8 @@ h3{font-size:13px}
       localStorage.setItem("allSkinsUnlocked",unlocked?"true":"false");
       localStorage.setItem("allSkins",unlocked?"true":"false");
       localStorage.setItem("unlockAllSkins",unlocked?"true":"false");
+      localStorage.setItem("onevone.allModesUnlocked","true");
+      localStorage.setItem("onevone.enabledModes",JSON.stringify(window.ONEVONE_ENABLED_MODES||[]));
     }catch(e){}
 
     try{
@@ -579,31 +587,117 @@ h3{font-size:13px}
   function sendEntitlementsToUnity(){
     applyGameEntitlements();
 
+    var profile=window.ONEVONE_GAME_PROFILE||{};
+    var unlocked=profile.allSkinsUnlocked===true;
+    var allModes=[
+      "1v1","1v1 Clash","Battle Royale","Zone Wars","Box Fight","Box Fight 2v2",
+      "Deathmatch","Zombies","Build Race","Practice","Aim Trainer","Bots","Custom"
+    ];
+
+    // Make the entitlement available to any page code / Unity integration.
+    try{
+      window.ONEVONE_AUTH_TOKEN=null;
+      var current=firebase.auth().currentUser;
+      if(current){
+        current.getIdToken().then(function(token){
+          window.ONEVONE_AUTH_TOKEN=token;
+          try{localStorage.setItem("onevone.authToken",token);}catch(e){}
+          window.dispatchEvent(new CustomEvent("onevone:auth-ready",{detail:{
+            token:token,
+            uid:current.uid,
+            username:profile.username||""
+          }}));
+          sendUnityAuthToken(token);
+        }).catch(function(){});
+      }
+    }catch(e){}
+
     if(!gameInstance||typeof gameInstance.SendMessage!=="function")return;
 
-    var payload=JSON.stringify(window.ONEVONE_GAME_PROFILE||{});
-    var unlocked=window.ONEVONE_GAME_PROFILE && window.ONEVONE_GAME_PROFILE.allSkinsUnlocked===true;
+    var payload=JSON.stringify({
+      uid:profile.uid||null,
+      username:profile.username||"",
+      avatar:profile.avatar||"",
+      allSkinsUnlocked:unlocked,
+      allModesUnlocked:true,
+      enabledModes:allModes,
+      equippedSkin:profile.equippedSkin||"default"
+    });
+
     var calls=[
       ["MainMenuManagers","SetUserData",payload],
       ["MainMenuManagers","SetPlayerData",payload],
       ["MainMenuManagers","SetAccountData",payload],
+      ["MainMenuManagers","SetAuthData",payload],
       ["MainMenuManagers","SetAllSkinsUnlocked",unlocked?"true":"false"],
       ["MainMenuManagers","SetAllSkins",unlocked?"true":"false"],
       ["MainMenuManagers","UnlockAllSkins",unlocked?"true":"false"],
       ["MainMenuManagers","UnlockAllCosmetics",unlocked?"true":"false"],
+      ["MainMenuManagers","SetAllModesUnlocked","true"],
+      ["MainMenuManagers","EnableAllModes","true"],
+      ["MainMenuManagers","UnlockAllModes","true"],
+      ["MainMenuManagers","SetAvailableModes",JSON.stringify(allModes)],
       ["MainMenuManagers","OnWebCallback",""]
     ];
 
-    calls.forEach(function(c){
-      try{gameInstance.SendMessage(c[0],c[1],c[2]);}catch(e){}
+    calls.forEach(function(call){
+      try{gameInstance.SendMessage(call[0],call[1],call[2]);}catch(e){}
     });
 
-    if(typeof window.sendConfig==="function"){
-      try{window.sendConfig();}catch(e){}
-    }
+    try{
+      if(typeof window.sendConfig==="function")window.sendConfig();
+    }catch(e){}
 
-    window.dispatchEvent(new CustomEvent("onevone:entitlements-ready",{detail:window.ONEVONE_GAME_PROFILE||{}}));
+    window.dispatchEvent(new CustomEvent("onevone:entitlements-ready",{
+      detail:{profile:profile,allSkinsUnlocked:unlocked,allModesUnlocked:true,enabledModes:allModes}
+    }));
   }
+
+  function sendUnityAuthToken(token){
+    if(!gameInstance||typeof gameInstance.SendMessage!=="function"||!token)return;
+    var u=firebase.auth().currentUser;
+    var profile=window.ONEVONE_GAME_PROFILE||{};
+    var userPayload=JSON.stringify({
+      uid:u&&u.uid||null,
+      username:profile.username||u&&u.displayName||"",
+      email:u&&u.email||"",
+      token:token
+    });
+
+    [
+      ["MainMenuManagers","SetAuthToken",token],
+      ["MainMenuManagers","SetFirebaseToken",token],
+      ["MainMenuManagers","SetIdToken",token],
+      ["MainMenuManagers","Login",token],
+      ["MainMenuManagers","OnLogin",userPayload],
+      ["MainMenuManagers","SetUserData",userPayload],
+      ["MainMenuManagers","SetAccountData",userPayload],
+      ["MainMenuManagers","OnWebCallback",""]
+    ].forEach(function(call){
+      try{gameInstance.SendMessage(call[0],call[1],call[2]);}catch(e){}
+    });
+
+    window.dispatchEvent(new CustomEvent("onevone:unity-auth-ready",{detail:{
+      uid:u&&u.uid||null,
+      username:profile.username||"",
+      token:token
+    }}));
+  }
+
+  function enterGameFullscreen(){
+    var target=$("gameContainer");
+    try{
+      if(document.fullscreenElement){
+        return document.exitFullscreen();
+      }
+      if(target&&target.requestFullscreen)return target.requestFullscreen({navigationUI:"hide"});
+    }catch(e){}
+    try{
+      if(gameInstance&&typeof gameInstance.SetFullscreen==="function")gameInstance.SetFullscreen(1);
+    }catch(e){}
+  }
+
+
 
   function setGameProgress(progress,detail){
     if(gameStarted&&$("loadingOverlay").classList.contains("hidden"))return;
@@ -843,6 +937,10 @@ h3{font-size:13px}
 
     $("googleBtn").onclick=google;
 
+    $("fullscreenButton").onclick=enterGameFullscreen;
+    document.addEventListener("fullscreenchange",function(){
+      $("fullscreenButton").textContent=document.fullscreenElement?"Exit fullscreen":"Fullscreen";
+    });
     $("profileButton").onclick=function(){if(state.user)show("profilePanel");else showAuthStatus("Log in to open your profile.",true);};
     $("leaderboardButton").onclick=function(){show("leaderboardPanel");};
     $("accountButton").onclick=function(){show("accountPanel");};
@@ -896,9 +994,13 @@ h3{font-size:13px}
           state.profile=snap.data();
           renderProfile();
           if(gameInstance)sendEntitlementsToUnity();
+          if(firebase.auth().currentUser)firebase.auth().currentUser.getIdToken().then(sendUnityAuthToken).catch(function(){});
         });
 
         applyGameEntitlements();
+        if(firebase.auth().currentUser){
+          firebase.auth().currentUser.getIdToken().then(sendUnityAuthToken).catch(function(){});
+        }
         hide("welcomeOverlay");
 
         if(!gameStarted){
