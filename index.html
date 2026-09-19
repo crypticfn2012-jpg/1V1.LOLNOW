@@ -712,40 +712,19 @@ h3{font-size:13px}
 
   function installMockAuthBridge(){
     try{
-      if(!window.firebase||typeof window.firebase.auth!=="function")return;
+      if(!window.firebase||typeof window.firebase.auth!=="function")return null;
       var mockAuth=window.firebase.auth();
-      if(!mockAuth||mockAuth===getRealAuth()||mockAuth.__onevoneGameBridgeInstalled)return;
+      if(!mockAuth||mockAuth===getRealAuth())return null;
 
-      var originalSignInWithPopup=mockAuth.signInWithPopup;
-      mockAuth.signInWithPopup=function(provider){
-        var realUser=getRealAuth().currentUser;
-        if(realUser&&!realUser.isAnonymous){
-          return ensureGameSession(realUser)
-            .then(function(session){
-              try{
-                if(mockAuth.currentUser){
-                  mockAuth.currentUser.uid=session.googleId||realUser.uid;
-                  mockAuth.currentUser.displayName=session.player&&session.player.display_name||realUser.displayName||"Player";
-                  mockAuth.currentUser.email=realUser.email||"";
-                  mockAuth.currentUser.isAnonymous=false;
-                  mockAuth.currentUser.getIdToken=function(){return Promise.resolve(session.token);};
-                }
-                return {user:mockAuth.currentUser};
-              }catch(e){
-                return {user:realUser};
-              }
-            })
-            .catch(function(){
-              return originalSignInWithPopup.call(mockAuth,provider);
-            });
-        }
-        return originalSignInWithPopup.call(mockAuth,provider);
-      };
-
-      mockAuth.__onevoneGameBridgeInstalled=true;
-      console.log("[1V1.LOLNOW] In-game Firebase login bridge installed.");
+      // Keep the Reloaded-style mock auth implementation intact. Its
+      // signInWithPopup() is responsible for creating the game-side
+      // google_id + session token through /api/auth/google.
+      window.ONEVONE_MOCK_AUTH=mockAuth;
+      console.log("[1V1.LOLNOW] Reloaded-style game auth bridge ready.");
+      return mockAuth;
     }catch(e){
-      console.warn("[1V1.LOLNOW] Could not install game auth bridge:",e);
+      console.warn("[1V1.LOLNOW] Could not access game auth bridge:",e);
+      return null;
     }
   }
 
@@ -785,37 +764,147 @@ h3{font-size:13px}
     return session;
   }
 
+  function rawStorageGet(key){
+    try{
+      return Storage.prototype.getItem.call(localStorage,key);
+    }catch(e){
+      try{return localStorage.getItem(key);}catch(_e){return null;}
+    }
+  }
+
+  function rawStorageSet(key,value){
+    try{
+      Storage.prototype.setItem.call(localStorage,key,value);
+    }catch(e){
+      try{localStorage.setItem(key,value);}catch(_e){}
+    }
+  }
+
+  async function waitForGameSessionFromMock(timeoutMs){
+    var started=Date.now();
+    while(Date.now()-started<timeoutMs){
+      var token=rawStorageGet("1v1_session_token")||"";
+      var googleId=rawStorageGet("1v1_google_id")||"";
+      if(token){
+        return {token:token,googleId:googleId};
+      }
+      await new Promise(function(resolve){setTimeout(resolve,100);});
+    }
+    return null;
+  }
+
+  async function loadGamePlayerFromSession(token){
+    if(!token)return null;
+    try{
+      var response=await fetch(gameApiUrl("/api/player"),{
+        method:"GET",
+        headers:{"Authorization":"Bearer "+token}
+      });
+      if(!response.ok)return null;
+      var data=await response.json();
+      return data&&data.player?data.player:null;
+    }catch(e){
+      return null;
+    }
+  }
+
+  function persistGameSession(session){
+    window.ONEVONE_GAME_SESSION=session;
+    try{
+      rawStorageSet("1v1_session_token",session.token||"");
+      rawStorageSet("1v1_google_id",session.googleId||"");
+      rawStorageSet("1v1_nickname",session.username||"Player");
+      rawStorageSet("onevone.gameSession",JSON.stringify(session));
+    }catch(e){}
+  }
+
+  function applyMockUser(mockAuth,session,user){
+    try{
+      if(!mockAuth||!mockAuth.currentUser)return;
+      var player=session&&session.player||{};
+      mockAuth.currentUser.uid=player.google_id||session.googleId||("guest-"+(player.id||"player"));
+      mockAuth.currentUser.displayName=player.display_name||user&&user.displayName||session.username||"Player";
+      mockAuth.currentUser.email=user&&user.email||player.email||"";
+      mockAuth.currentUser.isAnonymous=false;
+      mockAuth.currentUser.getIdToken=function(){return Promise.resolve(session.token||"");};
+    }catch(e){}
+  }
+
   async function ensureGameSession(user){
     if(!user||user.isAnonymous)return null;
 
+    installMockAuthBridge();
+    var mockAuth=window.ONEVONE_MOCK_AUTH||null;
     var existing=window.ONEVONE_GAME_SESSION||{};
-    if(existing.token&&existing.googleId&&existing.uid===user.uid){
-      await syncGamePlayerProfile();
-      installMockAuthBridge();
-      return existing;
-    }
-    if(existing.token&&existing.uid!==user.uid){
-      window.ONEVONE_GAME_SESSION=null;
-      try{
-        localStorage.removeItem("1v1_session_token");
-        localStorage.removeItem("1v1_google_id");
-        localStorage.removeItem("onevone.gameSession");
-      }catch(e){}
+
+    // First, resume a real Reloaded-style game session if the token still
+    // resolves to a player. This avoids creating a new game identity on every
+    // page load.
+    if(existing.token&&existing.uid===user.uid){
+      var resumed=await loadGamePlayerFromSession(existing.token);
+      if(resumed){
+        existing.player=resumed;
+        existing.googleId=resumed.google_id||existing.googleId||rawStorageGet("1v1_google_id")||"";
+        existing.username=resumed.display_name||existing.username||user.displayName||"Player";
+        persistGameSession(existing);
+        applyMockUser(mockAuth,existing,user);
+        await syncGamePlayerProfile();
+        return existing;
+      }
     }
 
-    var googleId="";
+    // If the old wrapper session belonged to another account or is stale,
+    // clear it so the mock can perform its own sign-in flow cleanly.
     try{
-      var providers=user.providerData||[];
-      for(var i=0;i<providers.length;i++){
-        if(providers[i]&&providers[i].providerId==="google.com"&&providers[i].uid){
-          googleId=providers[i].uid;
-          break;
-        }
+      if(existing.token||existing.uid!==user.uid){
+        rawStorageSet("1v1_session_token","");
+        rawStorageSet("1v1_google_id","");
+        localStorage.removeItem("onevone.gameSession");
       }
     }catch(e){}
+    window.ONEVONE_GAME_SESSION=null;
 
-    if(!googleId)googleId="firebase:"+String(user.uid);
+    // This is the important part: use the same game-side auth implementation
+    // as Reloaded. Its signInWithPopup() generates the game google_id and calls
+    // /api/auth/google itself, then stores 1v1_session_token.
+    if(mockAuth&&typeof mockAuth.signInWithPopup==="function"){
+      try{
+        var provider=window.getProvider?window.getProvider("google.com"):null;
+        await mockAuth.signInWithPopup(provider||{});
+        var mockSession=await waitForGameSessionFromMock(6000);
 
+        if(mockSession&&mockSession.token){
+          var player=await loadGamePlayerFromSession(mockSession.token);
+          if(player){
+            var session={
+              token:mockSession.token,
+              googleId:player.google_id||mockSession.googleId||rawStorageGet("1v1_google_id")||"",
+              player:player,
+              uid:user.uid,
+              username:player.display_name||user.displayName||((user.email||"player").split("@")[0])||"Player"
+            };
+            persistGameSession(session);
+            applyMockUser(mockAuth,session,user);
+
+            window.dispatchEvent(new CustomEvent("onevone:game-auth-ready",{
+              detail:{uid:user.uid,googleId:session.googleId,player:player}
+            }));
+
+            console.log("[1V1.LOLNOW] Reloaded-style game session established for "+session.username);
+            await syncGamePlayerProfile();
+            return session;
+          }
+        }
+      }catch(e){
+        console.warn("[1V1.LOLNOW] Reloaded-style game auth failed; trying direct session fallback:",e);
+      }
+    }
+
+    // Compatibility fallback for a game mock that does not expose its auth
+    // object yet. Keep the request shape identical to the Reloaded endpoint.
+    var googleId=rawStorageGet("1v1_google_id")||(
+      "google-"+Date.now()+"-"+Math.random().toString(36).slice(2,8)
+    );
     var username=(window.ONEVONE_GAME_PROFILE&&window.ONEVONE_GAME_PROFILE.username)
       ||user.displayName
       ||((user.email||"player").split("@")[0])
@@ -823,7 +912,7 @@ h3{font-size:13px}
 
     var payload={
       google_id:googleId,
-      email:user.email||"",
+      email:(user.email||"")+"@local.game".replace(/^\@/,""),
       display_name:username
     };
 
@@ -840,51 +929,23 @@ h3{font-size:13px}
       throw new Error("Game authentication returned an invalid session.");
     }
 
-    window.ONEVONE_GAME_SESSION={
+    var fallbackSession={
       token:data.token,
-      googleId:googleId,
+      googleId:data.player.google_id||googleId,
       player:data.player,
       uid:user.uid,
       username:data.player.display_name||username
     };
-
-    try{
-      localStorage.setItem("1v1_session_token",data.token);
-      localStorage.setItem("1v1_google_id",googleId);
-      localStorage.setItem("1v1_nickname",data.player.display_name||username);
-      localStorage.setItem("onevone.gameSession",JSON.stringify(window.ONEVONE_GAME_SESSION));
-    }catch(e){}
-
-    try{
-      if(typeof window._reloadPlayerData==="function"){
-        await window._reloadPlayerData();
-      }
-    }catch(e){}
+    persistGameSession(fallbackSession);
+    applyMockUser(mockAuth,fallbackSession,user);
 
     window.dispatchEvent(new CustomEvent("onevone:game-auth-ready",{
-      detail:{
-        uid:user.uid,
-        googleId:googleId,
-        player:data.player
-      }
+      detail:{uid:user.uid,googleId:fallbackSession.googleId,player:data.player}
     }));
 
-    console.log("[1V1.LOLNOW] Game session established for "+(data.player.display_name||username));
-
-    try{
-      var mockAuth=window.firebase&&typeof window.firebase.auth==="function"?window.firebase.auth():null;
-      if(mockAuth&&mockAuth.currentUser){
-        mockAuth.currentUser.uid=data.player.google_id||googleId;
-        mockAuth.currentUser.displayName=data.player.display_name||username;
-        mockAuth.currentUser.email=user.email||"";
-        mockAuth.currentUser.isAnonymous=false;
-        mockAuth.currentUser.getIdToken=function(){return Promise.resolve(data.token);};
-      }
-    }catch(e){}
-
-    installMockAuthBridge();
+    console.log("[1V1.LOLNOW] Game session established for "+fallbackSession.username);
     await syncGamePlayerProfile();
-    return window.ONEVONE_GAME_SESSION;
+    return fallbackSession;
   }
 
   window.getOneVOneGameSession=function(){
@@ -1014,7 +1075,8 @@ h3{font-size:13px}
   };
 
   window.initRemoteConfig=function(){
-    return Promise.resolve();
+    setFallbackGameConfig();
+    return Promise.resolve(window.conf);
   };
 
   // Extra compatibility helpers used by older builds.
