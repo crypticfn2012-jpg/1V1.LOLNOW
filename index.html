@@ -378,6 +378,9 @@ h3{font-size:13px}
   var state={user:null,profile:null,leaderboardUnsubscribe:null,profileUnsubscribe:null};
   var $=function(id){return document.getElementById(id);};
   var configured=!!(window.ONEVONE_FIREBASE_READY || (window.ONEVONE_FIREBASE_CONFIG&&window.ONEVONE_FIREBASE_CONFIG.apiKey&&!String(window.ONEVONE_FIREBASE_CONFIG.apiKey).startsWith("YOUR_")));
+  try{
+    window.ONEVONE_AUTH_TOKEN=window.ONEVONE_AUTH_TOKEN||localStorage.getItem("onevone.authToken")||"";
+  }catch(e){window.ONEVONE_AUTH_TOKEN="";}
 
   (function installLegacyStorageBridge(){
     try{
@@ -498,10 +501,22 @@ h3{font-size:13px}
       window.ONEVONE_AUTH_TOKEN=idToken;
       window.ONEVONE_GAME_AUTH=resultObj;
 
+      // Persist the credential under the names used by older 1v1.LOL/
+      // Reloaded-compatible server bridges as well as our own names.
       try{
-        localStorage.setItem("onevone.authToken",idToken);
-        localStorage.setItem("onevone.firebaseUid",u.uid||"");
-        localStorage.setItem("onevone.displayName",u.displayName||"");
+        var authKeys=[
+          "onevone.authToken",
+          "1v1_game_auth_token",
+          "1v1_game_token",
+          "1v1_auth_token",
+          "1v1_token",
+          "authToken"
+        ];
+        authKeys.forEach(function(key){localStorage.setItem(key,idToken);});
+        var uidKeys=["onevone.firebaseUid","1v1_uid","1v1_user_id","1v1_google_id"];
+        uidKeys.forEach(function(key){localStorage.setItem(key,u.uid||"");});
+        var nameKeys=["onevone.displayName","1v1_nickname","1v1_nick","1v1_display_name"];
+        nameKeys.forEach(function(key){localStorage.setItem(key,u.displayName||"");});
         localStorage.setItem("onevone.email",u.email||"");
       }catch(e){}
 
@@ -511,6 +526,15 @@ h3{font-size:13px}
 
       callLegacyCallback(successCallback,resultObj);
       sendUnityAuthToken(idToken);
+
+      // Give the external game mock several chances to consume the live
+      // credential after Firebase has finished resolving the account.
+      [250,1000,2500].forEach(function(delay){
+        setTimeout(function(){
+          try{sendUnityAuthToken(idToken);}catch(e){}
+          try{if(typeof window.onUnityReady==="function")window.onUnityReady();}catch(e){}
+        },delay);
+      });
     }).catch(function(error){
       console.error("[1V1.LOLNOW] retrieveIdToken failed:",error);
       callLegacyError(errorCallback,error&&error.message?error.message:"Could not get Firebase ID token.");
