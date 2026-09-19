@@ -474,12 +474,14 @@ h3{font-size:13px}
     if(snap.exists){
       var existing=snap.data();
       // 1V1.LOLNOW accounts are entitled to the full cosmetic collection.
-      if(existing.allSkinsUnlocked!==true){
+      if(existing.allSkinsUnlocked!==true || existing.allModesUnlocked!==true){
         await ref.update({
           allSkinsUnlocked:true,
+          allModesUnlocked:true,
           updatedAt:firebase.firestore.FieldValue.serverTimestamp()
         });
         existing.allSkinsUnlocked=true;
+        existing.allModesUnlocked=true;
       }
       return existing;
     }
@@ -548,17 +550,19 @@ h3{font-size:13px}
   function applyGameEntitlements(){
     var p=state.profile||{};
     var unlocked=p.allSkinsUnlocked===true;
+    var modesUnlocked=p.allModesUnlocked!==false;
     var entitlement={
       uid:state.user&&state.user.uid||null,
       username:p.username||"",
       avatar:p.avatar||"",
       allSkinsUnlocked:unlocked,
+      allModesUnlocked:modesUnlocked,
       equippedSkin:p.equippedSkin||"default"
     };
 
     window.ONEVONE_GAME_PROFILE=entitlement;
     window.ONEVONE_ALL_SKINS_UNLOCKED=unlocked;
-    window.ONEVONE_ALL_MODES_UNLOCKED=true;
+    window.ONEVONE_ALL_MODES_UNLOCKED=modesUnlocked;
     window.ONEVONE_ENABLED_MODES=[
       "1v1","1v1 Clash","Battle Royale","Zone Wars","Box Fight","Box Fight 2v2",
       "Deathmatch","Zombies","Build Race","Practice","Aim Trainer","Bots","Custom"
@@ -572,7 +576,7 @@ h3{font-size:13px}
       localStorage.setItem("allSkinsUnlocked",unlocked?"true":"false");
       localStorage.setItem("allSkins",unlocked?"true":"false");
       localStorage.setItem("unlockAllSkins",unlocked?"true":"false");
-      localStorage.setItem("onevone.allModesUnlocked","true");
+      localStorage.setItem("onevone.allModesUnlocked",modesUnlocked?"true":"false");
       localStorage.setItem("onevone.enabledModes",JSON.stringify(window.ONEVONE_ENABLED_MODES||[]));
     }catch(e){}
 
