@@ -34,17 +34,17 @@ In Firebase Console:
    - `crypticfn2012-jpg.github.io`
    - your custom domain, if you use one
 
-Firebase requires the page's domain to be authorized for web authentication flows. citeturn199643search0turn199643search1
+Firebase requires the page's domain to be authorized for web authentication flows.
 
 ### 2. Firestore
 
 Create the default Cloud Firestore database.
 
-Then open **Firestore -> Rules**, paste the contents of `firestore.rules`, and **Publish**. The rules file in this repository does not deploy to Firebase automatically just because it is committed to GitHub. Firebase documents publishing the rules from the console or deploying them with the Firebase CLI. citeturn199643search7turn199643search5
+Then open **Firestore -> Rules**, paste the contents of `firestore.rules`, and **Publish**. The rules file in this repository does not deploy to Firebase automatically just because it is committed to GitHub. Firebase documents publishing the rules from the console or deploying them with the Firebase CLI.
 
 ### 3. Web app config
 
-The site already has `firebase-config.js`. It must contain the config object for the same Firebase project as the Auth and Firestore resources. Firebase's web setup flow provides this config when you register a Web App in Project settings. citeturn199643search2
+The site already has `firebase-config.js`. It must contain the config object for the same Firebase project as the Auth and Firestore resources. Firebase's web setup flow provides this config when you register a Web App in Project settings.
 
 Do not put Firebase Admin SDK service-account JSON, private keys, or other server credentials in this repository.
 
@@ -52,7 +52,7 @@ Do not put Firebase Admin SDK service-account JSON, private keys, or other serve
 
 Publish the repository's `main` branch as a GitHub Pages site using the repository root as the source.
 
-Open the site over **HTTPS**. Google sign-in uses the browser OAuth flow and the serving domain must be authorized in Firebase. citeturn199643search1
+Open the site over **HTTPS**. Google sign-in uses the browser OAuth flow and the serving domain must be authorized in Firebase.
 
 ## Important: Firebase does not provide matchmaking
 
@@ -123,4 +123,4 @@ At that point, changing Firestore rules will not fix matchmaking. The external g
 7. Confirm GitHub Pages is serving the site over HTTPS.
 8. Confirm `onecloudcdn.site/build.json`, `server-mock.js`, `UnityLoader.js` and `UnityProgress.js` are reachable from the browser.
 
-Firebase recommends keeping web authentication domains explicitly authorized and using Firestore Security Rules to protect client data. citeturn199643search0turn199643search7
+Firebase recommends keeping web authentication domains explicitly authorized and using Firestore Security Rules to protect client data.
