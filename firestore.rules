@@ -2,24 +2,33 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
     match /players/{userId} {
-      allow read: if request.auth != null &&
-        (resource.data.publicProfile == true || request.auth.uid == userId);
+      allow read: if resource.data.publicProfile == true
+                  || (request.auth != null && request.auth.uid == userId);
+
       allow create: if request.auth != null
         && request.auth.uid == userId
         && request.resource.data.username is string
         && request.resource.data.username.size() >= 3
         && request.resource.data.username.size() <= 20;
-      allow update: if request.auth != null && request.auth.uid == userId;
+
+      allow update: if request.auth != null
+        && request.auth.uid == userId;
+
       allow delete: if false;
     }
 
     match /matches/{matchId} {
       allow create: if request.auth != null
         && request.resource.data.playerId == request.auth.uid;
+
       allow read: if request.auth != null
-        && (resource.data.playerId == request.auth.uid
-            || resource.data.opponentId == request.auth.uid);
+        && (
+          resource.data.playerId == request.auth.uid ||
+          resource.data.opponentId == request.auth.uid
+        );
+
       allow update, delete: if false;
     }
   }
