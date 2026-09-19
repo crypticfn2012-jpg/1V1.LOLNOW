@@ -967,6 +967,30 @@ h3{font-size:13px}
     }
   }
 
+  function persistGameSession(session){
+    window.ONEVONE_GAME_SESSION=session||null;
+    if(!session)return;
+    var payload="";
+    try{payload=JSON.stringify(session);}catch(e){return;}
+
+    try{
+      localStorage.setItem("onevone.gameSession",payload);
+      // These are the keys the legacy Reloaded client reads directly.
+      localStorage.setItem("1v1_session_token",session.token||"");
+      localStorage.setItem("1v1_google_id",session.googleId||"");
+      localStorage.setItem("1v1_nickname",session.username||session.player&&session.player.display_name||"");
+    }catch(e){
+      console.warn("[1V1.LOLNOW] Could not persist game session:",e);
+    }
+
+    try{
+      sessionStorage.setItem("onevone.gameSession",payload);
+      sessionStorage.setItem("1v1_session_token",session.token||"");
+      sessionStorage.setItem("1v1_google_id",session.googleId||"");
+      sessionStorage.setItem("1v1_nickname",session.username||session.player&&session.player.display_name||"");
+    }catch(e){}
+  }
+
   async function syncGamePlayerProfile(){
     var user=getRealAuth().currentUser;
     var session=window.ONEVONE_GAME_SESSION||{};
