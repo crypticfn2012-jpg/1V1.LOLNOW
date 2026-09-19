@@ -29,6 +29,8 @@
       !String(window.ONEVONE_FIREBASE_CONFIG.apiKey).startsWith("YOUR_")
     ) {
       firebase.initializeApp(window.ONEVONE_FIREBASE_CONFIG);
+      window.ONEVONE_GOOGLE_PROVIDER = firebase.auth.GoogleAuthProvider;
+      window.ONEVONE_FACEBOOK_PROVIDER = firebase.auth.FacebookAuthProvider;
       window.ONEVONE_REAL_AUTH = firebase.auth();
       window.ONEVONE_REAL_FIRESTORE = firebase.firestore();
       window.ONEVONE_FIRESTORE_FIELD_VALUE = firebase.firestore.FieldValue;
@@ -485,9 +487,12 @@ h3{font-size:13px}
   }
 
   window.getProvider=function(providerName){
-    if(providerName && String(providerName).indexOf("facebook")!==-1)
-      return new firebase.auth.FacebookAuthProvider();
-    return new firebase.auth.GoogleAuthProvider();
+    if(providerName && String(providerName).indexOf("facebook")!==-1){
+      var FacebookProvider=window.ONEVONE_FACEBOOK_PROVIDER;
+      return FacebookProvider?new FacebookProvider():new firebase.auth.FacebookAuthProvider();
+    }
+    var GoogleProvider=window.ONEVONE_GOOGLE_PROVIDER;
+    return GoogleProvider?new GoogleProvider():new firebase.auth.GoogleAuthProvider();
   };
 
   window.initializeFireBase=function(){
@@ -501,11 +506,91 @@ h3{font-size:13px}
     return firebase.apps.length?firebase.app():null;
   };
 
+  function installMockAuthBridge(){
+    try{
+      if(!window.firebase||typeof window.firebase.auth!=="function")return;
+      var mockAuth=window.firebase.auth();
+      if(!mockAuth||mockAuth===getRealAuth()||mockAuth.__onevoneGameBridgeInstalled)return;
+
+      var originalSignInWithPopup=mockAuth.signInWithPopup;
+      mockAuth.signInWithPopup=function(provider){
+        var realUser=getRealAuth().currentUser;
+        if(realUser&&!realUser.isAnonymous){
+          return ensureGameSession(realUser)
+            .then(function(){
+              try{
+                return {user:mockAuth.currentUser};
+              }catch(e){
+                return {user:realUser};
+              }
+            })
+            .catch(function(){
+              return originalSignInWithPopup.call(mockAuth,provider);
+            });
+        }
+        return originalSignInWithPopup.call(mockAuth,provider);
+      };
+
+      mockAuth.__onevoneGameBridgeInstalled=true;
+      console.log("[1V1.LOLNOW] In-game Firebase login bridge installed.");
+    }catch(e){
+      console.warn("[1V1.LOLNOW] Could not install game auth bridge:",e);
+    }
+  }
+
+  async function syncGamePlayerProfile(){
+    var user=getRealAuth().currentUser;
+    var session=window.ONEVONE_GAME_SESSION||{};
+    var profile=window.ONEVONE_GAME_PROFILE||{};
+    if(!user||!session.token)return session;
+
+    var update={};
+    if(profile.username)update.display_name=profile.username;
+    if(user.email)update.email=user.email;
+    if(user.uid)update.firebase_uid=user.uid;
+
+    if(Object.keys(update).length){
+      try{
+        var response=await fetch("/api/player/save",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify(update)
+        });
+        if(response.ok){
+          var data=await response.json();
+          if(data&&data.player){
+            session.player=data.player;
+            session.username=data.player.display_name||session.username;
+            window.ONEVONE_GAME_SESSION=session;
+          }
+        }
+      }catch(e){}
+    }
+
+    try{
+      if(typeof window._reloadPlayerData==="function")await window._reloadPlayerData();
+    }catch(e){}
+
+    return session;
+  }
+
   async function ensureGameSession(user){
     if(!user||user.isAnonymous)return null;
 
     var existing=window.ONEVONE_GAME_SESSION||{};
-    if(existing.token&&existing.googleId)return existing;
+    if(existing.token&&existing.googleId&&existing.uid===user.uid){
+      await syncGamePlayerProfile();
+      installMockAuthBridge();
+      return existing;
+    }
+    if(existing.token&&existing.uid!==user.uid){
+      window.ONEVONE_GAME_SESSION=null;
+      try{
+        localStorage.removeItem("1v1_session_token");
+        localStorage.removeItem("1v1_google_id");
+        localStorage.removeItem("onevone.gameSession");
+      }catch(e){}
+    }
 
     var googleId="";
     try{
@@ -574,6 +659,8 @@ h3{font-size:13px}
     }));
 
     console.log("[1V1.LOLNOW] Game session established for "+(data.player.display_name||username));
+    installMockAuthBridge();
+    await syncGamePlayerProfile();
     return window.ONEVONE_GAME_SESSION;
   }
 
@@ -895,9 +982,37 @@ h3{font-size:13px}
     window.ONEVONE_ALL_SKINS_UNLOCKED=unlocked;
     window.ONEVONE_ALL_MODES_UNLOCKED=modesUnlocked;
     window.ONEVONE_ENABLED_MODES=[
-      "1v1","1v1 Clash","Battle Royale","Zone Wars","Box Fight","Box Fight 2v2",
-      "Deathmatch","Zombies","Build Race","Practice","Aim Trainer","Bots","Custom",
-      "Free Build","Team Deathmatch","Headshots Only","Snipers","Gun Game"
+      "1v1",
+      "Teams_2v2",
+      "Vikings_Teams_3v3",
+      "BoxFight_1v1",
+      "BoxFight_Teams_2v2",
+      "BattleRoyale_ZoneWars",
+      "BattleRoyale_Teams_2v2",
+      "Teams_City_ZoneWars",
+      "PipeRun_Race",
+      "Deathmatch",
+      "Gulag",
+      "FreeForAll",
+      "Arena",
+      "Pumpkin_Ball",
+      "Gulag_2v2",
+      "Farm",
+      "Farm_2v2",
+      "1v1_Competitive",
+      "Teams_2v2_Competitive",
+      "BoxFight_1v1_Competitive",
+      "Practice",
+      "AimTrainer",
+      "Zombies",
+      "PipeRun",
+      "Race",
+      "1v1_Custom",
+      "Deathmatch_Custom",
+      "PipeRun_Custom",
+      "Gulag_Custom",
+      "Zone_Custom",
+      "City_ZoneWars_Custom"
     ];
 
     var payload=JSON.stringify(entitlement);
@@ -1054,6 +1169,7 @@ h3{font-size:13px}
     gameStarted=true;
     setLoading("Loading 1v1.LOLNOW","Starting the Unity client…",8);
     applyGameEntitlements();
+    installMockAuthBridge();
 
     try{
       gameInstance=window.UnityLoader.instantiate(
@@ -1080,7 +1196,19 @@ h3{font-size:13px}
 
       // Keep the compatibility callbacks used by the original Unity build.
       window.unityAdFinishedCallback=function(){
-        try{if(gameInstance)gameInstance.SendMessage("MainMenuManagers","OnWebCallback");}catch(e){}
+        if(!gameInstance)return;
+        [
+          ["WebAdsManager","OnWebCallback"],
+          ["MainMenuManagers","OnWebCallback"],
+          ["PersistantObjects","OnWebCallback"],
+          ["WebCallbacks","RvWatchComplete","true"],
+          ["PersistantObjects","RvWatchComplete","true"]
+        ].forEach(function(t){
+          try{
+            if(t.length===3)gameInstance.SendMessage(t[0],t[1],t[2]);
+            else gameInstance.SendMessage(t[0],t[1]);
+          }catch(e){}
+        });
       };
       window.requestNewAd=function(){window.unityAdFinishedCallback();};
       window.showAds=function(){};
@@ -1143,7 +1271,9 @@ h3{font-size:13px}
           try{
             localStorage.setItem("onevone.enabledModes",JSON.stringify(modes));
             localStorage.setItem("onevone.allModesUnlocked","true");
+            localStorage.setItem("LastUsedMode","1v1");
             sessionStorage.setItem("onevone.enabledModes",JSON.stringify(modes));
+            sessionStorage.setItem("LastUsedMode","1v1");
           }catch(e){}
           window.dispatchEvent(new CustomEvent("onevone:modes-ready",{
             detail:{allModesUnlocked:true,enabledModes:modes}
@@ -1207,7 +1337,8 @@ h3{font-size:13px}
     if(!configured){showAuthStatus("Firebase is not configured.",true);return;}
     setAuthBusy(true,"Connecting…");
     try{
-      var provider=new firebase.auth.GoogleAuthProvider();
+      var GoogleProvider=window.ONEVONE_GOOGLE_PROVIDER||firebase.auth.GoogleAuthProvider;
+      var provider=new GoogleProvider();
       var r=await getRealAuth().signInWithPopup(provider);
       await ensureProfile(r.user);
       showAuthStatus("Signed in. Loading your account…",false);
