@@ -121,8 +121,16 @@ document.addEventListener("DOMContentLoaded",()=>{
  $("authSubmit").onclick=login;$("loginTab").onclick=()=>{ $("signupFields").hidden=true;$("loginTab").classList.add("active");$("signupTab").classList.remove("active");$("authTitle").textContent="Log in";$("authSubmitText").textContent="Log in";$("authSubmit").onclick=login};
  $("signupTab").onclick=()=>{$("signupFields").hidden=false;$("signupTab").classList.add("active");$("loginTab").classList.remove("active");$("authTitle").textContent="Create account";$("authSubmitText").textContent="Create account";$("authSubmit").onclick=signup};
  document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>panel("homePanel"));
- if(!configured){$("setupWarning").hidden=false;leaderboard();return}
- firebase.initializeApp(window.ONEVONE_FIREBASE_CONFIG);db=firebase.firestore();leaderboard();
+ if(!configured){$("setupWarning").hidden=false;return}
+ try{
+   firebase.initializeApp(window.ONEVONE_FIREBASE_CONFIG);
+   db=firebase.firestore();
+   leaderboard();
+ }catch(e){
+   console.error(e);
+   $("setupWarning").hidden=false;
+   $("setupWarning").textContent="Firebase could not start. Check firebase-config.js and your Firebase project settings.";
+ }
  firebase.auth().onAuthStateChanged(async user=>{state.user=user;if(user){state.profile=await ensureProfile(user);state.profileUnsubscribe&&state.profileUnsubscribe();state.profileUnsubscribe=db.collection("players").doc(user.uid).onSnapshot(s=>{state.profile=s.data();render();$("accountButton").textContent=state.profile?.username||"Account"});render();}else{$("accountButton").textContent="Login";state.profile=null}});
 });
 </script>
