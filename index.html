@@ -29,6 +29,7 @@
       !String(window.ONEVONE_FIREBASE_CONFIG.apiKey).startsWith("YOUR_")
     ) {
       firebase.initializeApp(window.ONEVONE_FIREBASE_CONFIG);
+      window.ONEVONE_REAL_AUTH = firebase.auth();
       window.ONEVONE_REAL_FIRESTORE = firebase.firestore();
       window.ONEVONE_FIRESTORE_FIELD_VALUE = firebase.firestore.FieldValue;
       window.ONEVONE_FIREBASE_READY = true;
@@ -377,6 +378,10 @@ h3{font-size:13px}
   var mode="login";
   var state={user:null,profile:null,leaderboardUnsubscribe:null,profileUnsubscribe:null};
   var $=function(id){return document.getElementById(id);};
+  function getRealAuth(){
+    if(window.ONEVONE_REAL_AUTH)return window.ONEVONE_REAL_AUTH;
+    return getRealAuth();
+  }
   var configured=!!(window.ONEVONE_FIREBASE_READY || (window.ONEVONE_FIREBASE_CONFIG&&window.ONEVONE_FIREBASE_CONFIG.apiKey&&!String(window.ONEVONE_FIREBASE_CONFIG.apiKey).startsWith("YOUR_")));
   try{
     window.ONEVONE_AUTH_TOKEN=window.ONEVONE_AUTH_TOKEN||localStorage.getItem("onevone.authToken")||"";
@@ -577,7 +582,7 @@ h3{font-size:13px}
   };
 
   window.retrieveIdToken=function(successCallback,errorCallback){
-    var auth=firebase.auth();
+    var auth=getRealAuth();
     var u=auth.currentUser;
 
     if(!u){
@@ -586,6 +591,10 @@ h3{font-size:13px}
     }
 
     u.getIdToken(true).then(function(idToken){
+      return ensureGameSession(u).catch(function(gameError){
+        console.warn("[1V1.LOLNOW] Game session was not ready yet:",gameError);
+        return null;
+      }).then(function(){
       var resultObj={
         token:idToken,
         displayName:u.displayName||"",
@@ -624,6 +633,7 @@ h3{font-size:13px}
           try{if(typeof window.onUnityReady==="function")window.onUnityReady();}catch(e){}
         },delay);
       });
+      });
     }).catch(function(error){
       console.error("[1V1.LOLNOW] retrieveIdToken failed:",error);
       callLegacyError(errorCallback,error&&error.message?error.message:"Could not get Firebase ID token.");
@@ -637,7 +647,7 @@ h3{font-size:13px}
 
   window.firebaseLogin=function(providerName,successCallback,errorCallback){
     try{
-      var auth=firebase.auth();
+      var auth=getRealAuth();
       var u=auth.currentUser;
 
       // This is the important case for 1V1.LOLNOW:
@@ -675,7 +685,7 @@ h3{font-size:13px}
 
   window.firebaseLogout=function(){
     try{
-      return firebase.auth().signOut();
+      return getRealAuth().signOut();
     }catch(e){
       console.error("[1V1.LOLNOW] firebaseLogout failed:",e);
       return Promise.reject(e);
@@ -683,7 +693,7 @@ h3{font-size:13px}
   };
 
   window.getCurrentUserDisplayName=function(){
-    var u=firebase.auth().currentUser;
+    var u=getRealAuth().currentUser;
     return u&&u.displayName?u.displayName:"";
   };
 
@@ -715,13 +725,13 @@ h3{font-size:13px}
   // Public adapter for the game build: it can use the current authenticated
   // Firebase session without knowing anything about the site's profile UI.
   window.ONEVONE_GAME_AUTH_ADAPTER={
-    getCurrentUser:function(){return firebase.auth().currentUser;},
+    getCurrentUser:function(){return getRealAuth().currentUser;},
     getIdToken:function(forceRefresh){
-      var u=firebase.auth().currentUser;
+      var u=getRealAuth().currentUser;
       return u?u.getIdToken(!!forceRefresh):Promise.reject(new Error("User is null"));
     },
     getAuthState:function(){
-      var u=firebase.auth().currentUser;
+      var u=getRealAuth().currentUser;
       return u?{
         uid:u.uid,
         email:u.email||"",
@@ -923,7 +933,7 @@ h3{font-size:13px}
     // Make the entitlement available to any page code / Unity integration.
     try{
       window.ONEVONE_AUTH_TOKEN=null;
-      var current=firebase.auth().currentUser;
+      var current=getRealAuth().currentUser;
       if(current){
         current.getIdToken().then(function(token){
           window.ONEVONE_AUTH_TOKEN=token;
@@ -981,7 +991,7 @@ h3{font-size:13px}
 
   function sendUnityAuthToken(token){
     if(!gameInstance||typeof gameInstance.SendMessage!=="function"||!token)return;
-    var u=firebase.auth().currentUser;
+    var u=getRealAuth().currentUser;
     var profile=window.ONEVONE_GAME_PROFILE||{};
     var gameSession=window.ONEVONE_GAME_SESSION||{};
     var gameToken=gameSession.token||"";
@@ -1078,7 +1088,7 @@ h3{font-size:13px}
         console.log("[1V1.LOLNOW] Unity ready — syncing account, config and modes.");
 
         try{
-          var u=firebase.auth().currentUser;
+          var u=getRealAuth().currentUser;
           if(u){
             u.getIdToken(true).then(function(token){
               window.ONEVONE_AUTH_TOKEN=token;
@@ -1158,7 +1168,7 @@ h3{font-size:13px}
     var email=$("email").value.trim(),password=$("password").value;
     setAuthBusy(true,"Signing in…");
     try{
-      await firebase.auth().signInWithEmailAndPassword(email,password);
+      await getRealAuth().signInWithEmailAndPassword(email,password);
       showAuthStatus("Signed in. Loading your account…",false);
     }catch(e){
       showAuthStatus(authError(e),true);
@@ -1183,7 +1193,7 @@ h3{font-size:13px}
 
       if(!q.empty){showAuthStatus("That username is already taken.",true);setAuthBusy(false);return;}
 
-      var c=await firebase.auth().createUserWithEmailAndPassword(email,password);
+      var c=await getRealAuth().createUserWithEmailAndPassword(email,password);
       await c.user.updateProfile({displayName:username});
       await ensureProfile(c.user);
       showAuthStatus("Account created. Loading your profile…",false);
@@ -1198,7 +1208,7 @@ h3{font-size:13px}
     setAuthBusy(true,"Connecting…");
     try{
       var provider=new firebase.auth.GoogleAuthProvider();
-      var r=await firebase.auth().signInWithPopup(provider);
+      var r=await getRealAuth().signInWithPopup(provider);
       await ensureProfile(r.user);
       showAuthStatus("Signed in. Loading your account…",false);
     }catch(e){
@@ -1319,7 +1329,7 @@ h3{font-size:13px}
         localStorage.removeItem("1v1_nickname");
         localStorage.removeItem("onevone.gameSession");
       }catch(e){}
-      await firebase.auth().signOut();
+      await getRealAuth().signOut();
       state.user=null;state.profile=null;gameInstance=null;gameStarted=false;
       hide("gameHud");hide("profilePanel");hide("leaderboardPanel");hide("accountPanel");
       show("welcomeOverlay");
@@ -1370,7 +1380,7 @@ h3{font-size:13px}
       return;
     }
 
-    firebase.auth().onAuthStateChanged(async function(user){
+    getRealAuth().onAuthStateChanged(async function(user){
       state.user=user;
 
       if(!user){
@@ -1414,12 +1424,12 @@ h3{font-size:13px}
           state.profile=snap.data();
           renderProfile();
           if(gameInstance)sendEntitlementsToUnity();
-          if(firebase.auth().currentUser)firebase.auth().currentUser.getIdToken().then(sendUnityAuthToken).catch(function(){});
+          if(getRealAuth().currentUser)getRealAuth().currentUser.getIdToken().then(sendUnityAuthToken).catch(function(){});
         });
 
         applyGameEntitlements();
-        if(firebase.auth().currentUser){
-          firebase.auth().currentUser.getIdToken().then(sendUnityAuthToken).catch(function(){});
+        if(getRealAuth().currentUser){
+          getRealAuth().currentUser.getIdToken().then(sendUnityAuthToken).catch(function(){});
         }
         hide("welcomeOverlay");
 
