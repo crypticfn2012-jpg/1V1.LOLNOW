@@ -532,7 +532,7 @@ h3{font-size:13px}
     $("statDeaths").textContent=Number(p.deaths||0);
     $("statWinRate").textContent=Number(p.winRate||0).toFixed(1)+"%";
 
-    var unlocked=p.allSkinsUnlocked===true;
+    var unlocked=window.ONEVONE_GAME_PROFILE && window.ONEVONE_GAME_PROFILE.allSkinsUnlocked===true;
     $("skinStatus").textContent=unlocked?"Unlocked":"Standard";
     $("skinTitle").textContent=unlocked?"All skins unlocked":"Standard skin access";
     $("skinDescription").textContent=unlocked
