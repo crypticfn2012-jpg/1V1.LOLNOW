@@ -31,6 +31,7 @@
       firebase.initializeApp(window.ONEVONE_FIREBASE_CONFIG);
       window.ONEVONE_GOOGLE_PROVIDER = firebase.auth.GoogleAuthProvider;
       window.ONEVONE_FACEBOOK_PROVIDER = firebase.auth.FacebookAuthProvider;
+      window.ONEVONE_REAL_FIREBASE_APP = firebase.app();
       window.ONEVONE_REAL_AUTH = firebase.auth();
       window.ONEVONE_REAL_FIRESTORE = firebase.firestore();
       window.ONEVONE_FIRESTORE_FIELD_VALUE = firebase.firestore.FieldValue;
@@ -694,14 +695,19 @@ h3{font-size:13px}
   };
 
   window.initializeFireBase=function(){
+    if(window.ONEVONE_REAL_FIREBASE_APP)return window.ONEVONE_REAL_FIREBASE_APP;
     try{
-      if(!firebase.apps.length && configured){
-        firebase.initializeApp(window.ONEVONE_FIREBASE_CONFIG);
+      if(configured && window.ONEVONE_FIREBASE_CONFIG){
+        var realApp=firebase.apps&&firebase.apps.length
+          ? firebase.app()
+          : firebase.initializeApp(window.ONEVONE_FIREBASE_CONFIG);
+        window.ONEVONE_REAL_FIREBASE_APP=realApp;
+        return realApp;
       }
     }catch(e){
       console.error("[1V1.LOLNOW] initializeFireBase failed:",e);
     }
-    return firebase.apps.length?firebase.app():null;
+    return null;
   };
 
   function installMockAuthBridge(){
