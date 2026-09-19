@@ -582,6 +582,7 @@ h3{font-size:13px}
     if(!gameInstance||typeof gameInstance.SendMessage!=="function")return;
 
     var payload=JSON.stringify(window.ONEVONE_GAME_PROFILE||{});
+    var unlocked=p.allSkinsUnlocked===true;
     var calls=[
       ["MainMenuManagers","SetUserData",payload],
       ["MainMenuManagers","SetPlayerData",payload],
