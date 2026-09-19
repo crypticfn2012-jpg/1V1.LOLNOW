@@ -464,20 +464,10 @@ h3{font-size:13px}
   };
 
   window.sendConfig=function(){
+    // This build has no MainMenuManagers/ActivateRemoteConfig receiver.
+    // Keep config in browser state and let the network bridge handle legacy API calls.
     setFallbackGameConfig();
-    if(!window.unityInstance || typeof window.unityInstance.SendMessage!=="function"){
-      return Promise.resolve(false);
-    }
-    try{
-      window.unityInstance.SendMessage(
-        "MainMenuManagers",
-        "ActivateRemoteConfig",
-        JSON.stringify(window.conf)
-      );
-      return Promise.resolve(true);
-    }catch(e){
-      return Promise.reject(e);
-    }
+    return Promise.resolve(false);
   };
 
   function patchServerUserEntitlements(){
@@ -531,10 +521,260 @@ h3{font-size:13px}
     }catch(e){}
   }
 
+  function stableGamePlayerId(uid){
+    var value=String(uid||"player"),hash=2166136261;
+    for(var i=0;i<value.length;i++){
+      hash^=value.charCodeAt(i);
+      hash=Math.imul(hash,16777619);
+    }
+    return 100000+Math.abs(hash%899999);
+  }
+
+  function fallbackLegacyGameUser(){
+    var profile=window.ONEVONE_GAME_PROFILE||{};
+    var session=window.ONEVONE_GAME_SESSION||{};
+    var name=profile.username||session.username||"Player";
+    var id=session.player&&session.player.id||stableGamePlayerId(profile.uid||"player");
+    var now=new Date().toISOString();
+    return {
+      ID:id,
+      Nickname:name,
+      Rating:1000,
+      BoxRating:1000,
+      DuosRating:1000,
+      CustomRating:1000,
+      Elo:1000,
+      XP:0,
+      SoftCurrency:0,
+      HardCurrency:0,
+      Volatility:0.06,
+      Deviation:350,
+      RVData:{Watched:0,CurrentSkin:"",LastRvSkinTime:now,LastRvSkinDateTime:now},
+      Skins:{
+        WeaponSkins:[],
+        CharacterSkins:FULL_SKIN_IDS.slice(),
+        EquippedWeaponSkins:[],
+        EquippedCharacterSkin:profile.equippedSkin||"lol.1v1.playerskins.pack.1",
+        OwnedEmotes:[],
+        EquippedEmotes:[]
+      },
+      BattlePass:{
+        Seasons:{
+          "0":{XP:0,IsPremium:true},
+          "1":{XP:0,IsPremium:true},
+          "2":{XP:0,IsPremium:true},
+          "3":{XP:0,IsPremium:true}
+        },
+        seasons:{
+          "0":{XP:0,IsPremium:true},
+          "1":{XP:0,IsPremium:true},
+          "2":{XP:0,IsPremium:true},
+          "3":{XP:0,IsPremium:true}
+        }
+      },
+      DailyRewards:{Version:"1.0",Rewards:[]},
+      EventsProgression:{Events:{}},
+      Premium:{AdsDisabled:true,LTV:0},
+      Stats:{
+        TotalKills:0,
+        TotalDeaths:0,
+        Victories:{},
+        Defeats:{},
+        TotalGamesPlayed:0,
+        ConsecutiveWins:0
+      },
+      Settings:{Controls:{},Audio:{},Video:{},Gameplay:{},Account:{}}
+    };
+  }
+
+  function buildLegacyGameUser(){
+    var profile=window.ONEVONE_GAME_PROFILE||{};
+    var session=window.ONEVONE_GAME_SESSION||{};
+    var source={
+      id:session.player&&session.player.id||stableGamePlayerId(profile.uid||"player"),
+      displayName:profile.username||session.username||"Player",
+      owned_skins:FULL_SKIN_IDS.slice(),
+      equipped_skin:profile.equippedSkin||"lol.1v1.playerskins.pack.1",
+      premium:{isPremium:true,IsPremium:true},
+      isPremium:true,
+      all_skins_unlocked:true,
+      allSkinsUnlocked:true,
+      stats:{totalKills:0,totalDeaths:0,totalGamesPlayed:0,byMode:{}}
+    };
+
+    var user=null;
+    try{
+      if(typeof window._buildFullServerUser417==="function"){
+        user=window._buildFullServerUser417(source);
+      }
+    }catch(e){}
+    if(!user)user=fallbackLegacyGameUser();
+
+    try{
+      user.Skins=user.Skins||{};
+      user.Skins.CharacterSkins=FULL_SKIN_IDS.slice();
+      user.Skins.EquippedCharacterSkin=source.equipped_skin;
+      user.Premium=user.Premium||{};
+      user.Premium.IsPremium=true;
+      user.Premium.AdsDisabled=true;
+      user.Nickname=source.displayName;
+      user.ID=source.id;
+      user.Rating=Number(user.Rating||1000);
+      user.Elo=Number(user.Elo||1000);
+    }catch(e){}
+
+    window.ONEVONE_GAME_LEGACY_USER=user;
+    return user;
+  }
+
+  function legacyCloudFunctionRoute(url){
+    var value=String(url||"");
+    if(value.indexOf("us-central1-justbuild-cdb86.cloudfunctions.net")===-1)return "";
+    if(value.indexOf("/player/login")!==-1)return "player/login";
+    if(value.indexOf("/userSettings/time")!==-1)return "userSettings/time";
+    if(value.indexOf("/analytics")!==-1)return "analytics";
+    if(value.indexOf("time")!==-1||value.indexOf("clock")!==-1)return "time";
+    return "";
+  }
+
+  function legacyResponseBody(route){
+    var user=buildLegacyGameUser();
+    var session=window.ONEVONE_GAME_SESSION||{};
+
+    if(route==="player/login"){
+      return JSON.stringify({
+        success:true,
+        ok:true,
+        token:session.token||"",
+        player:user,
+        data:user,
+        ID:user.ID,
+        Nickname:user.Nickname,
+        Rating:user.Rating,
+        Elo:user.Elo,
+        Skins:user.Skins,
+        Premium:user.Premium,
+        Stats:user.Stats
+      });
+    }
+
+    if(route==="userSettings/time")return JSON.stringify(new Date().toISOString());
+    if(route==="time")return String(Date.now());
+    if(route==="analytics")return JSON.stringify({status:"ok",success:true});
+    return JSON.stringify({success:true,ok:true});
+  }
+
+  function installLegacyHttpBridge(){
+    if(window.ONEVONE_LEGACY_HTTP_BRIDGE_READY)return;
+    window.ONEVONE_LEGACY_HTTP_BRIDGE_READY=true;
+
+    var baseFetch=window.fetch;
+    if(typeof baseFetch==="function"){
+      var bridgedFetch=function(input,init){
+        var url="";
+        try{url=typeof input==="string"?input:(input&&input.url)||"";}catch(e){}
+        var route=legacyCloudFunctionRoute(url);
+        if(route){
+          console.log("[1V1.LOLNOW] Local HTTP bridge -> "+route);
+          return Promise.resolve(new Response(legacyResponseBody(route),{
+            status:200,
+            headers:{"Content-Type":"application/json"}
+          }));
+        }
+        return baseFetch.call(this,input,init);
+      };
+      bridgedFetch.__onevoneLegacyBridge=true;
+      window.fetch=bridgedFetch;
+    }
+
+    var BaseXHR=window.XMLHttpRequest;
+    if(typeof BaseXHR==="function"){
+      var OneVOneXHR=function(){
+        var xhr=new BaseXHR();
+        var route="";
+        var finished=false;
+
+        function fire(name){
+          try{
+            var handler=xhr["on"+name];
+            if(typeof handler==="function"){
+              handler.call(xhr,{target:xhr,currentTarget:xhr,type:name});
+            }
+          }catch(e){}
+        }
+
+        function complete(){
+          if(finished)return;
+          finished=true;
+          var body=legacyResponseBody(route);
+          try{Object.defineProperty(xhr,"readyState",{configurable:true,get:function(){return 4;}});}catch(e){}
+          try{Object.defineProperty(xhr,"status",{configurable:true,get:function(){return 200;}});}catch(e){}
+          try{Object.defineProperty(xhr,"statusText",{configurable:true,get:function(){return "OK";}});}catch(e){}
+          try{Object.defineProperty(xhr,"responseText",{configurable:true,get:function(){return body;}});}catch(e){}
+          try{Object.defineProperty(xhr,"response",{configurable:true,get:function(){
+            return xhr.responseType==="arraybuffer" ? new TextEncoder().encode(body).buffer : body;
+          }});}catch(e){}
+          fire("readystatechange");
+          fire("load");
+          fire("loadend");
+        }
+
+        var originalOpen=xhr.open.bind(xhr);
+        var originalSend=xhr.send.bind(xhr);
+        var originalSetRequestHeader=typeof xhr.setRequestHeader==="function"?xhr.setRequestHeader.bind(xhr):null;
+        var originalGetResponseHeader=typeof xhr.getResponseHeader==="function"?xhr.getResponseHeader.bind(xhr):null;
+        var originalGetAllResponseHeaders=typeof xhr.getAllResponseHeaders==="function"?xhr.getAllResponseHeaders.bind(xhr):null;
+
+        xhr.open=function(method,url,async,user,password){
+          route=legacyCloudFunctionRoute(url);
+          if(route)return;
+          return originalOpen(method,url,async,user,password);
+        };
+
+        xhr.setRequestHeader=function(name,value){
+          if(route)return;
+          if(originalSetRequestHeader)return originalSetRequestHeader(name,value);
+        };
+
+        xhr.getResponseHeader=function(name){
+          if(route&&String(name||"").toLowerCase()==="content-type")return "application/json";
+          if(route)return null;
+          return originalGetResponseHeader?originalGetResponseHeader(name):null;
+        };
+
+        xhr.getAllResponseHeaders=function(){
+          if(route)return "content-type: application/json\r\n";
+          return originalGetAllResponseHeaders?originalGetAllResponseHeaders():"";
+        };
+
+        xhr.send=function(body){
+          if(route){
+            setTimeout(complete,0);
+            return;
+          }
+          return originalSend(body);
+        };
+
+        return xhr;
+      };
+
+      OneVOneXHR.prototype=BaseXHR.prototype;
+      try{
+        Object.getOwnPropertyNames(BaseXHR).forEach(function(key){
+          try{OneVOneXHR[key]=BaseXHR[key];}catch(e){}
+        });
+      }catch(e){}
+      window.XMLHttpRequest=OneVOneXHR;
+    }
+
+    console.log("[1V1.LOLNOW] Legacy Unity HTTP bridge installed.");
+  }
+
   async function loadGameRuntime(){
     if(window.ONEVONE_GAME_RUNTIME_READY && window.UnityLoader)return true;
 
     await loadExternalScript("https://onecloudcdn.site/server-mock.js");
+    installLegacyHttpBridge();
     // The mock owns the /api/* interception layer. Mark it ready before
     // creating/resuming the game session so our requests stay relative.
     window.ONEVONE_GAME_API_READY=true;
@@ -733,221 +973,89 @@ h3{font-size:13px}
     var profile=window.ONEVONE_GAME_PROFILE||{};
     if(!user||!session.token)return session;
 
-    var update={};
-    if(profile.username)update.display_name=profile.username;
-    if(user.email)update.email=user.email;
-    if(user.uid)update.firebase_uid=user.uid;
-
-    if(Object.keys(update).length){
-      try{
-        var response=await fetch(gameApiUrl("/api/player/save"),{
-          method:"POST",
-          headers:{
-            "Content-Type":"application/json",
-            "Authorization":"Bearer "+session.token
-          },
-          body:JSON.stringify(update)
-        });
-        if(response.ok){
-          var data=await response.json();
-          if(data&&data.player){
-            session.player=data.player;
-            session.username=data.player.display_name||session.username;
-            window.ONEVONE_GAME_SESSION=session;
-          }
-        }
-      }catch(e){}
+    if(session.player){
+      session.player.display_name=profile.username||user.displayName||session.player.display_name||"Player";
+      session.player.email=user.email||session.player.email||"";
+      session.player.firebase_uid=user.uid||"";
+      session.player.owned_skins=FULL_SKIN_IDS.slice();
+      session.player.all_skins_unlocked=true;
+      session.player.allSkinsUnlocked=true;
+      session.player.premium=true;
+      session.player.isPremium=true;
     }
-
-    try{
-      if(typeof window._reloadPlayerData==="function")await window._reloadPlayerData();
-    }catch(e){}
-
+    session.username=profile.username||user.displayName||session.username||"Player";
+    persistGameSession(session);
+    applyMockUser(window.ONEVONE_MOCK_AUTH||null,session,user);
     return session;
   }
 
-  function rawStorageGet(key){
-    try{
-      return Storage.prototype.getItem.call(localStorage,key);
-    }catch(e){
-      try{return localStorage.getItem(key);}catch(_e){return null;}
-    }
-  }
-
-  function rawStorageSet(key,value){
-    try{
-      Storage.prototype.setItem.call(localStorage,key,value);
-    }catch(e){
-      try{localStorage.setItem(key,value);}catch(_e){}
-    }
-  }
-
-  async function waitForGameSessionFromMock(timeoutMs){
-    var started=Date.now();
-    while(Date.now()-started<timeoutMs){
-      var token=rawStorageGet("1v1_session_token")||"";
-      var googleId=rawStorageGet("1v1_google_id")||"";
-      if(token){
-        return {token:token,googleId:googleId};
-      }
-      await new Promise(function(resolve){setTimeout(resolve,100);});
-    }
-    return null;
-  }
-
-  async function loadGamePlayerFromSession(token){
-    if(!token)return null;
-    try{
-      var response=await fetch(gameApiUrl("/api/player"),{
-        method:"GET",
-        headers:{"Authorization":"Bearer "+token}
-      });
-      if(!response.ok)return null;
-      var data=await response.json();
-      return data&&data.player?data.player:null;
-    }catch(e){
-      return null;
-    }
-  }
-
-  function persistGameSession(session){
-    window.ONEVONE_GAME_SESSION=session;
-    try{
-      rawStorageSet("1v1_session_token",session.token||"");
-      rawStorageSet("1v1_google_id",session.googleId||"");
-      rawStorageSet("1v1_nickname",session.username||"Player");
-      rawStorageSet("onevone.gameSession",JSON.stringify(session));
-    }catch(e){}
-  }
-
-  function applyMockUser(mockAuth,session,user){
-    try{
-      if(!mockAuth||!mockAuth.currentUser)return;
-      var player=session&&session.player||{};
-      mockAuth.currentUser.uid=player.google_id||session.googleId||("guest-"+(player.id||"player"));
-      mockAuth.currentUser.displayName=player.display_name||user&&user.displayName||session.username||"Player";
-      mockAuth.currentUser.email=user&&user.email||player.email||"";
-      mockAuth.currentUser.isAnonymous=false;
-      mockAuth.currentUser.getIdToken=function(){return Promise.resolve(session.token||"");};
-    }catch(e){}
-  }
 
   async function ensureGameSession(user){
     if(!user||user.isAnonymous)return null;
 
-    installMockAuthBridge();
-    var mockAuth=window.ONEVONE_MOCK_AUTH||null;
     var existing=window.ONEVONE_GAME_SESSION||{};
-
-    // First, resume a real Reloaded-style game session if the token still
-    // resolves to a player. This avoids creating a new game identity on every
-    // page load.
     if(existing.token&&existing.uid===user.uid){
-      var resumed=await loadGamePlayerFromSession(existing.token);
-      if(resumed){
-        existing.player=resumed;
-        existing.googleId=resumed.google_id||existing.googleId||rawStorageGet("1v1_google_id")||"";
-        existing.username=resumed.display_name||existing.username||user.displayName||"Player";
-        persistGameSession(existing);
-        applyMockUser(mockAuth,existing,user);
-        await syncGamePlayerProfile();
-        return existing;
-      }
+      applyMockUser(window.ONEVONE_MOCK_AUTH||null,existing,user);
+      window.ONEVONE_GAME_LEGACY_USER=buildLegacyGameUser();
+      return existing;
     }
 
-    // If the old wrapper session belonged to another account or is stale,
-    // clear it so the mock can perform its own sign-in flow cleanly.
+    var googleId="";
     try{
-      if(existing.token||existing.uid!==user.uid){
-        rawStorageSet("1v1_session_token","");
-        rawStorageSet("1v1_google_id","");
-        localStorage.removeItem("onevone.gameSession");
+      var providers=user.providerData||[];
+      for(var i=0;i<providers.length;i++){
+        if(providers[i]&&providers[i].providerId==="google.com"&&providers[i].uid){
+          googleId=providers[i].uid;
+          break;
+        }
       }
     }catch(e){}
-    window.ONEVONE_GAME_SESSION=null;
+    if(!googleId)googleId="firebase:"+String(user.uid);
 
-    // This is the important part: use the same game-side auth implementation
-    // as Reloaded. Its signInWithPopup() generates the game google_id and calls
-    // /api/auth/google itself, then stores 1v1_session_token.
-    if(mockAuth&&typeof mockAuth.signInWithPopup==="function"){
-      try{
-        var provider=window.getProvider?window.getProvider("google.com"):null;
-        await mockAuth.signInWithPopup(provider||{});
-        var mockSession=await waitForGameSessionFromMock(6000);
-
-        if(mockSession&&mockSession.token){
-          var player=await loadGamePlayerFromSession(mockSession.token);
-          if(player){
-            var session={
-              token:mockSession.token,
-              googleId:player.google_id||mockSession.googleId||rawStorageGet("1v1_google_id")||"",
-              player:player,
-              uid:user.uid,
-              username:player.display_name||user.displayName||((user.email||"player").split("@")[0])||"Player"
-            };
-            persistGameSession(session);
-            applyMockUser(mockAuth,session,user);
-
-            window.dispatchEvent(new CustomEvent("onevone:game-auth-ready",{
-              detail:{uid:user.uid,googleId:session.googleId,player:player}
-            }));
-
-            console.log("[1V1.LOLNOW] Reloaded-style game session established for "+session.username);
-            await syncGamePlayerProfile();
-            return session;
-          }
-        }
-      }catch(e){
-        console.warn("[1V1.LOLNOW] Reloaded-style game auth failed; trying direct session fallback:",e);
-      }
-    }
-
-    // Compatibility fallback for a game mock that does not expose its auth
-    // object yet. Keep the request shape identical to the Reloaded endpoint.
-    var googleId=rawStorageGet("1v1_google_id")||(
-      "google-"+Date.now()+"-"+Math.random().toString(36).slice(2,8)
-    );
     var username=(window.ONEVONE_GAME_PROFILE&&window.ONEVONE_GAME_PROFILE.username)
       ||user.displayName
       ||((user.email||"player").split("@")[0])
       ||"Player";
 
-    var payload={
+    var player={
+      id:stableGamePlayerId(user.uid),
       google_id:googleId,
-      email:(user.email||"")+"@local.game".replace(/^\@/,""),
-      display_name:username
+      display_name:username,
+      email:user.email||"",
+      firebase_uid:user.uid,
+      rating:1000,
+      rating_box:1000,
+      rating_duos:1000,
+      rating_custom:1000,
+      elo:1000,
+      xp:0,
+      owned_skins:FULL_SKIN_IDS.slice(),
+      equipped_skin:(window.ONEVONE_GAME_PROFILE&&window.ONEVONE_GAME_PROFILE.equippedSkin)||"lol.1v1.playerskins.pack.1",
+      premium:true,
+      isPremium:true,
+      all_skins_unlocked:true,
+      allSkinsUnlocked:true,
+      stats:{totalKills:0,totalDeaths:0,totalGamesPlayed:0,byMode:{}}
     };
 
-    var response=await fetch(gameApiUrl("/api/auth/google"),{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify(payload)
-    });
-
-    if(!response.ok)throw new Error("Game authentication failed ("+response.status+").");
-
-    var data=await response.json();
-    if(!data||!data.token||!data.player){
-      throw new Error("Game authentication returned an invalid session.");
-    }
-
-    var fallbackSession={
-      token:data.token,
-      googleId:data.player.google_id||googleId,
-      player:data.player,
+    var session={
+      token:"game-"+String(user.uid)+"-"+Date.now()+"-"+Math.random().toString(36).slice(2,10),
+      googleId:googleId,
+      player:player,
       uid:user.uid,
-      username:data.player.display_name||username
+      username:username
     };
-    persistGameSession(fallbackSession);
-    applyMockUser(mockAuth,fallbackSession,user);
+
+    persistGameSession(session);
+    applyMockUser(window.ONEVONE_MOCK_AUTH||null,session,user);
+    window.ONEVONE_GAME_LEGACY_USER=buildLegacyGameUser();
 
     window.dispatchEvent(new CustomEvent("onevone:game-auth-ready",{
-      detail:{uid:user.uid,googleId:fallbackSession.googleId,player:data.player}
+      detail:{uid:user.uid,googleId:googleId,player:player}
     }));
 
-    console.log("[1V1.LOLNOW] Game session established for "+fallbackSession.username);
-    await syncGamePlayerProfile();
-    return fallbackSession;
+    console.log("[1V1.LOLNOW] Local Reloaded-compatible game session established for "+username);
+    return session;
   }
 
   window.getOneVOneGameSession=function(){
@@ -1298,104 +1406,39 @@ h3{font-size:13px}
 
   function sendEntitlementsToUnity(){
     applyGameEntitlements();
-
-    var profile=window.ONEVONE_GAME_PROFILE||{};
-    var unlocked=profile.allSkinsUnlocked===true;
-    var allModes=ALL_GAME_MODES.slice();
-
-    // Make the entitlement available to any page code / Unity integration.
-    try{
-      window.ONEVONE_AUTH_TOKEN=null;
-      var current=getRealAuth().currentUser;
-      if(current){
-        current.getIdToken().then(function(token){
-          window.ONEVONE_AUTH_TOKEN=token;
-          try{localStorage.setItem("onevone.authToken",token);}catch(e){}
-          window.dispatchEvent(new CustomEvent("onevone:auth-ready",{detail:{
-            token:token,
-            uid:current.uid,
-            username:profile.username||""
-          }}));
-          sendUnityAuthToken(token);
-        }).catch(function(){});
-      }
-    }catch(e){}
-
-    if(!gameInstance||typeof gameInstance.SendMessage!=="function")return;
-
-    var payload=JSON.stringify({
-      uid:profile.uid||null,
-      username:profile.username||"",
-      avatar:profile.avatar||"",
-      allSkinsUnlocked:unlocked,
-      allModesUnlocked:true,
-      enabledModes:allModes,
-      equippedSkin:profile.equippedSkin||"default"
-    });
-
-    var calls=[
-      ["MainMenuManagers","SetUserData",payload],
-      ["MainMenuManagers","SetPlayerData",payload],
-      ["MainMenuManagers","SetAccountData",payload],
-      ["MainMenuManagers","SetAuthData",payload],
-      ["MainMenuManagers","SetAllSkinsUnlocked",unlocked?"true":"false"],
-      ["MainMenuManagers","SetAllSkins",unlocked?"true":"false"],
-      ["MainMenuManagers","UnlockAllSkins",unlocked?"true":"false"],
-      ["MainMenuManagers","UnlockAllCosmetics",unlocked?"true":"false"],
-      ["MainMenuManagers","SetAllModesUnlocked","true"],
-      ["MainMenuManagers","EnableAllModes","true"],
-      ["MainMenuManagers","UnlockAllModes","true"],
-      ["MainMenuManagers","SetAvailableModes",JSON.stringify(allModes)],
-      ["MainMenuManagers","OnWebCallback",""]
-    ];
-
-    calls.forEach(function(call){
-      try{gameInstance.SendMessage(call[0],call[1],call[2]);}catch(e){}
-    });
-
-    try{
-      if(typeof window.sendConfig==="function")window.sendConfig();
-    }catch(e){}
-
+    window.ONEVONE_GAME_LEGACY_USER=buildLegacyGameUser();
     window.dispatchEvent(new CustomEvent("onevone:entitlements-ready",{
-      detail:{profile:profile,allSkinsUnlocked:unlocked,allModesUnlocked:true,enabledModes:allModes}
+      detail:{
+        profile:window.ONEVONE_GAME_PROFILE||{},
+        allSkinsUnlocked:true,
+        allModesUnlocked:true,
+        enabledModes:ALL_GAME_MODES.slice()
+      }
     }));
   }
 
+
   function sendUnityAuthToken(token){
-    if(!gameInstance||typeof gameInstance.SendMessage!=="function"||!token)return;
+    if(!token)return;
     var u=getRealAuth().currentUser;
     var profile=window.ONEVONE_GAME_PROFILE||{};
-    var gameSession=window.ONEVONE_GAME_SESSION||{};
-    var gameToken=gameSession.token||"";
-    var userPayload=JSON.stringify({
+    var session=window.ONEVONE_GAME_SESSION||{};
+    window.ONEVONE_GAME_LEGACY_AUTH={
       uid:u&&u.uid||null,
       username:profile.username||u&&u.displayName||"",
       email:u&&u.email||"",
-      token:token,
-      gameToken:gameToken
-    });
-
-    [
-      ["MainMenuManagers","SetAuthToken",gameToken||token],
-      ["MainMenuManagers","SetGameSessionToken",gameToken],
-      ["MainMenuManagers","SetFirebaseToken",token],
-      ["MainMenuManagers","SetIdToken",token],
-      ["MainMenuManagers","Login",token],
-      ["MainMenuManagers","OnLogin",userPayload],
-      ["MainMenuManagers","SetUserData",userPayload],
-      ["MainMenuManagers","SetAccountData",userPayload],
-      ["MainMenuManagers","OnWebCallback",""]
-    ].forEach(function(call){
-      try{gameInstance.SendMessage(call[0],call[1],call[2]);}catch(e){}
-    });
-
-    window.dispatchEvent(new CustomEvent("onevone:unity-auth-ready",{detail:{
-      uid:u&&u.uid||null,
-      username:profile.username||"",
-      token:token
-    }}));
+      firebaseToken:token,
+      gameToken:session.token||""
+    };
+    window.dispatchEvent(new CustomEvent("onevone:unity-auth-ready",{
+      detail:{
+        uid:u&&u.uid||null,
+        username:profile.username||"",
+        gameSessionReady:!!session.token
+      }
+    }));
   }
+
 
   function enterGameFullscreen(){
     var target=$("gameContainer");
@@ -1429,9 +1472,6 @@ h3{font-size:13px}
 
       if(state.user){
         await ensureGameSession(state.user);
-        if(!window.ONEVONE_GAME_SESSION||!window.ONEVONE_GAME_SESSION.token){
-          throw new Error("The game session could not be established.");
-        }
       }
 
       if(!window.UnityLoader || typeof window.UnityLoader.instantiate!=="function"){
@@ -1706,7 +1746,7 @@ h3{font-size:13px}
     try{
       if(state.profileUnsubscribe)state.profileUnsubscribe();
       if(state.leaderboardUnsubscribe)state.leaderboardUnsubscribe();
-      try{await fetch(gameApiUrl("/api/auth/logout"),{method:"POST"});}catch(e){}
+      // Game session is local to this wrapper.
       window.ONEVONE_GAME_SESSION=null;
       try{
         localStorage.removeItem("1v1_session_token");
