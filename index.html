@@ -534,6 +534,9 @@ h3{font-size:13px}
     if(window.ONEVONE_GAME_RUNTIME_READY && window.UnityLoader)return true;
 
     await loadExternalScript("https://onecloudcdn.site/server-mock.js");
+    // The mock owns the /api/* interception layer. Mark it ready before
+    // creating/resuming the game session so our requests stay relative.
+    window.ONEVONE_GAME_API_READY=true;
     installGameRuntimeCompatibility();
 
     if(state.user){
@@ -574,6 +577,9 @@ h3{font-size:13px}
   }
 
   function gameApiUrl(path){
+    // Once server-mock.js is running, keep API URLs relative so its own
+    // network interceptor handles /api/* exactly like the original client.
+    if(window.ONEVONE_GAME_API_READY)return path;
     return getGameApiOrigin()+path;
   }
   var configured=!!(window.ONEVONE_FIREBASE_READY || (window.ONEVONE_FIREBASE_CONFIG&&window.ONEVONE_FIREBASE_CONFIG.apiKey&&!String(window.ONEVONE_FIREBASE_CONFIG.apiKey).startsWith("YOUR_")));
