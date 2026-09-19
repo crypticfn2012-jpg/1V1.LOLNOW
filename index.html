@@ -352,6 +352,39 @@ h3{font-size:13px}
   var $=function(id){return document.getElementById(id);};
   var configured=!!(window.ONEVONE_FIREBASE_CONFIG&&window.ONEVONE_FIREBASE_CONFIG.apiKey&&!String(window.ONEVONE_FIREBASE_CONFIG.apiKey).startsWith("YOUR_"));
 
+  // Compatibility bridge used by the original Unity/WebGL client.
+  window.initializeFireBase=function(){
+    if(!firebase.apps.length && configured)firebase.initializeApp(window.ONEVONE_FIREBASE_CONFIG);
+    return firebase.apps.length?firebase.app():null;
+  };
+  window.retrieveIdToken=function(successCallback,errorCallback){
+    var u=firebase.auth().currentUser;
+    if(!u){if(errorCallback)errorCallback("User is null");return;}
+    u.getIdToken().then(function(token){
+      if(successCallback)successCallback({token:token,displayName:u.displayName||""});
+    }).catch(function(error){if(errorCallback)errorCallback(error.message);});
+  };
+  window.anonymousLogin=function(successCallback){
+    if(successCallback)successCallback({token:"",displayName:"guest"});
+  };
+  window.firebaseLogin=function(providerName,successCallback,errorCallback){
+    var u=firebase.auth().currentUser;
+    if(u&&!u.isAnonymous){window.retrieveIdToken(successCallback,errorCallback);return;}
+    if(providerName==="anonymous"){window.anonymousLogin(successCallback,errorCallback);return;}
+    var provider=(providerName&&String(providerName).indexOf("facebook")!==-1)
+      ?new firebase.auth.FacebookAuthProvider()
+      :new firebase.auth.GoogleAuthProvider();
+    firebase.auth().signInWithPopup(provider)
+      .then(function(){window.retrieveIdToken(successCallback,errorCallback);})
+      .catch(function(error){if(errorCallback)errorCallback(error.message);});
+  };
+  window.firebaseLogout=function(){return firebase.auth().signOut();};
+  window.getCurrentUserDisplayName=function(){
+    var u=firebase.auth().currentUser;
+    return u&&u.displayName?u.displayName:"";
+  };
+  window.initRemoteConfig=function(){return Promise.resolve();};
+
   function toast(message,error){
     var e=$("toast");
     e.textContent=message;
