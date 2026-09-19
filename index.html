@@ -541,10 +541,9 @@ h3{font-size:13px}
     installGameRuntimeCompatibility();
 
     if(state.user){
-      try{
-        await ensureGameSession(state.user);
-      }catch(e){
-        console.warn("[1V1.LOLNOW] Game session could not be established during startup:",e);
+      await ensureGameSession(state.user);
+      if(!window.ONEVONE_GAME_SESSION||!window.ONEVONE_GAME_SESSION.token){
+        throw new Error("The game session could not be established.");
       }
     }
 
@@ -743,7 +742,10 @@ h3{font-size:13px}
       try{
         var response=await fetch(gameApiUrl("/api/player/save"),{
           method:"POST",
-          headers:{"Content-Type":"application/json"},
+          headers:{
+            "Content-Type":"application/json",
+            "Authorization":"Bearer "+session.token
+          },
           body:JSON.stringify(update)
         });
         if(response.ok){
@@ -1426,8 +1428,10 @@ h3{font-size:13px}
       await loadGameRuntime();
 
       if(state.user){
-        try{ await ensureGameSession(state.user); }
-        catch(e){ console.warn("[1V1.LOLNOW] Final game-session sync failed:",e); }
+        await ensureGameSession(state.user);
+        if(!window.ONEVONE_GAME_SESSION||!window.ONEVONE_GAME_SESSION.token){
+          throw new Error("The game session could not be established.");
+        }
       }
 
       if(!window.UnityLoader || typeof window.UnityLoader.instantiate!=="function"){
