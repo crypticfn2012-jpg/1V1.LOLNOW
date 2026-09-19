@@ -563,7 +563,9 @@ h3{font-size:13px}
       localStorage.setItem("onevone.profile",payload);
       localStorage.setItem("onevone.allSkinsUnlocked",unlocked?"true":"false");
       localStorage.setItem("allSkinsUnlocked",unlocked?"true":"false");
-      localStorage.setItem("allSkins","true"===unlocked?"true":"false");
+      localStorage.setItem("allSkinsUnlocked",unlocked?"true":"false");
+      localStorage.setItem("allSkins",unlocked?"true":"false");
+      localStorage.setItem("unlockAllSkins",unlocked?"true":"false");
     }catch(e){}
 
     try{
@@ -584,8 +586,10 @@ h3{font-size:13px}
       ["MainMenuManagers","SetUserData",payload],
       ["MainMenuManagers","SetPlayerData",payload],
       ["MainMenuManagers","SetAccountData",payload],
-      ["MainMenuManagers","SetAllSkinsUnlocked","true"],
-      ["MainMenuManagers","SetAllSkins","true"],
+      ["MainMenuManagers","SetAllSkinsUnlocked",unlocked?"true":"false"],
+      ["MainMenuManagers","SetAllSkins",unlocked?"true":"false"],
+      ["MainMenuManagers","UnlockAllSkins",unlocked?"true":"false"],
+      ["MainMenuManagers","UnlockAllCosmetics",unlocked?"true":"false"],
       ["MainMenuManagers","OnWebCallback",""]
     ];
 
