@@ -412,7 +412,18 @@ h3{font-size:13px}
   async function ensureProfile(user){
     var ref=db.collection("players").doc(user.uid);
     var snap=await ref.get();
-    if(snap.exists)return snap.data();
+    if(snap.exists){
+      var existing=snap.data();
+      // 1V1.LOLNOW accounts are entitled to the full cosmetic collection.
+      if(existing.allSkinsUnlocked!==true){
+        await ref.update({
+          allSkinsUnlocked:true,
+          updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+        });
+        existing.allSkinsUnlocked=true;
+      }
+      return existing;
+    }
 
     var base=(user.displayName||(user.email||"player").split("@")[0])
       .replace(/[^a-zA-Z0-9_ -]/g,"").slice(0,20)||"player";
