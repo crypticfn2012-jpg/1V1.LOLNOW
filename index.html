@@ -39,7 +39,7 @@
 </div>
 
 <div id="accountPanel" class="panel">
- <div class="card small"><button class="close" data-close>Close</button><h2>Account</h2><p id="accountStatus" class="muted">Not signed in</p><div class="actions"><button id="openProfile">Profile</button><button id="logoutBtn">Log out</button></div></div>
+ <div class="card small"><button class="close" data-close>Close</button><h2>Account</h2><p id="accountPanelStatus" class="muted">Not signed in</p><div class="actions"><button id="openProfile">Profile</button><button id="logoutBtn">Log out</button></div></div>
 </div>
 
 <div id="profilePanel" class="panel">
@@ -71,7 +71,7 @@ async function ensureProfile(user){
  if(snap.exists)return snap.data();
  let username=(user.displayName||(user.email||"player").split("@")[0]).replace(/[^a-zA-Z0-9_ -]/g,"").slice(0,20)||"player";
  const profile={username,usernameLower:username.toLowerCase(),email:user.email||"",avatar:user.photoURL||"",wins:0,losses:0,matches:0,kills:0,deaths:0,elo:1000,winRate:0,equippedSkin:"default",allSkinsUnlocked:true,publicProfile:true,createdAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
- const clash=await db.collection("players").where("usernameLower","==",profile.usernameLower).limit(1).get();
+ const clash=await db.collection("players").where("publicProfile","==",true).where("usernameLower","==",profile.usernameLower).limit(1).get();
  if(!clash.empty){username=username+"_"+Math.floor(Math.random()*9999);profile.username=username;profile.usernameLower=username.toLowerCase()}
  await ref.set(profile);return profile;
 }
@@ -87,7 +87,7 @@ async function login(){try{await firebase.auth().signInWithEmailAndPassword($("e
 async function signup(){
  const email=$("email").value.trim(),password=$("password").value,username=$("username").value.trim();
  if(!/^[a-zA-Z0-9_ -]{3,20}$/.test(username)){toast("Username must be 3–20 valid characters.",true);return}
- try{const q=await db.collection("players").where("usernameLower","==",username.toLowerCase()).limit(1).get();if(!q.empty){toast("Username already taken.",true);return}
+ try{const q=await db.collection("players").where("publicProfile","==",true).where("usernameLower","==",username.toLowerCase()).limit(1).get();if(!q.empty){toast("Username already taken.",true);return}
  const c=await firebase.auth().createUserWithEmailAndPassword(email,password);await c.user.updateProfile({displayName:username});await ensureProfile(c.user);toast("Account created.")}
  catch(e){toast(authError(e),true)}
 }
@@ -95,7 +95,7 @@ async function google(){try{const r=await firebase.auth().signInWithPopup(new fi
 async function logout(){await firebase.auth().signOut();panel("homePanel");toast("Signed out.")}
 async function saveUsername(){
  if(!state.user)return;const username=$("usernameInput").value.trim();if(!/^[a-zA-Z0-9_ -]{3,20}$/.test(username)){toast("Invalid username.",true);return}
- try{const q=await db.collection("players").where("usernameLower","==",username.toLowerCase()).limit(1).get();if(!q.empty&&q.docs[0].id!==state.user.uid){toast("Username already taken.",true);return}
+ try{const q=await db.collection("players").where("publicProfile","==",true).where("usernameLower","==",username.toLowerCase()).limit(1).get();if(!q.empty&&q.docs[0].id!==state.user.uid){toast("Username already taken.",true);return}
  await db.collection("players").doc(state.user.uid).update({username,usernameLower:username.toLowerCase(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()});await state.user.updateProfile({displayName:username});toast("Username updated.")}
  catch(e){toast(e.message,true)}
 }
