@@ -2,137 +2,845 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#090b10">
 <title>1v1.LOLNOW</title>
 <link rel="icon" href="https://onecloudcdn.site/favicon.ico">
+
 <script src="https://www.gstatic.com/firebasejs/7.24.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/7.24.0/firebase-auth.js"></script>
 <script src="https://www.gstatic.com/firebasejs/7.24.0/firebase-firestore.js"></script>
-<style>
-*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:#050608;color:#f5f7fb;font-family:Inter,system-ui,sans-serif}body{overflow:hidden}#gameContainer{position:fixed;inset:0;background:#000}.topbar{position:fixed;z-index:20;top:14px;left:50%;transform:translateX(-50%);display:flex;gap:8px;padding:7px;background:rgba(9,11,16,.88);border:1px solid #252a35;border-radius:12px;backdrop-filter:blur(14px)}button{border:1px solid #2d3442;background:#11151d;color:#e8ecf4;border-radius:8px;padding:9px 13px;font-weight:700;cursor:pointer}button:hover{background:#191f2a}.logged-in{border-color:#4b8cff}.panel{display:none;position:fixed;z-index:30;inset:0;background:rgba(0,0,0,.66);align-items:center;justify-content:center;padding:20px}.panel.active{display:flex}.card{width:min(720px,100%);max-height:90vh;overflow:auto;background:#0d1016;border:1px solid #292f3b;border-radius:16px;padding:24px;box-shadow:0 20px 80px #000}.small{width:min(430px,100%)}h1,h2{margin:0 0 14px}input{width:100%;padding:11px 12px;margin:6px 0;background:#080a0e;border:1px solid #2a303b;border-radius:8px;color:#fff;outline:none}.tabs,.actions{display:flex;gap:8px;margin:12px 0}.tab.active{background:#fff;color:#080a0e}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.stat{padding:14px;background:#11151d;border:1px solid #252b36;border-radius:10px}.stat b{display:block;font-size:22px;margin-top:4px}.leader{border:1px solid #252b36;border-radius:10px;overflow:hidden}.leader-row{display:grid;grid-template-columns:45px 1fr repeat(4,70px);gap:8px;padding:11px;border-top:1px solid #20252e;align-items:center}.leader-row:first-child{border-top:0}.player{display:flex;align-items:center;gap:9px}.avatar{width:28px;height:28px;border-radius:50%;background:#1e2735;display:grid;place-items:center;font-size:12px}.current{background:#121c2b}.muted{color:#8e97a8}.close{float:right}.toast{position:fixed;z-index:50;left:50%;bottom:24px;transform:translateX(-50%) translateY(15px);opacity:0;padding:11px 15px;background:#121720;border:1px solid #303846;border-radius:9px;transition:.2s}.toast.show{opacity:1;transform:translateX(-50%)}.toast.error{border-color:#8c3d3d}.setup{position:fixed;z-index:25;left:20px;bottom:20px;background:#261b0b;border:1px solid #65471c;padding:12px;border-radius:10px;max-width:420px}.loading,.empty{padding:20px;color:#8e97a8;text-align:center}@media(max-width:650px){.grid{grid-template-columns:repeat(2,1fr)}.leader-row{grid-template-columns:35px 1fr repeat(2,55px)}.leader-row span:nth-last-child(-n+2){display:none}}
-</style>
 <script src="firebase-config.js"></script>
+
+<!-- The original Unity build depends on these browser-side helpers. -->
+<script src="https://onecloudcdn.site/server-mock.js"></script>
+<script src="https://onecloudcdn.site/UnityLoader.js"></script>
+<script src="https://onecloudcdn.site/UnityProgress.js"></script>
+
+<style>
+:root{
+  --bg:#07090d;
+  --panel:rgba(13,16,23,.82);
+  --panel-strong:#10141c;
+  --border:rgba(255,255,255,.09);
+  --border-strong:rgba(255,255,255,.15);
+  --text:#f6f7fb;
+  --muted:#939aaa;
+  --accent:#68a0ff;
+  --accent-2:#8f6cff;
+  --good:#63d79b;
+  --danger:#ff7777;
+  --shadow:0 28px 90px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;background:#000;color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{overflow:hidden}
+button,input{font:inherit}
+button{border:0}
+#gameContainer{position:fixed;inset:0;background:#000}
+#gameContainer canvas{display:block;width:100%!important;height:100%!important}
+#gameFrameCover{position:fixed;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 0%,rgba(86,108,158,.08),transparent 36%)}
+
+.glass{
+  background:linear-gradient(180deg,rgba(19,23,31,.88),rgba(10,13,18,.88));
+  border:1px solid var(--border);
+  box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.035);
+  backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+}
+.topbar{
+  position:fixed;z-index:80;top:16px;left:16px;right:16px;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  pointer-events:none;
+}
+.brand{
+  display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:13px;
+  pointer-events:auto;
+}
+.brand-mark{width:28px;height:28px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 8px 28px rgba(104,160,255,.24)}
+.brand-copy{line-height:1}
+.brand-copy strong{display:block;font-size:13px;letter-spacing:.02em}
+.brand-copy span{display:block;color:var(--muted);font-size:10px;margin-top:3px}
+.actions{display:flex;gap:8px;pointer-events:auto}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;
+  padding:0 13px;border-radius:11px;color:var(--text);background:#111620;
+  border:1px solid var(--border);cursor:pointer;transition:.18s ease;white-space:nowrap;
+}
+.btn:hover{transform:translateY(-1px);background:#161c27;border-color:var(--border-strong)}
+.btn:active{transform:translateY(0)}
+.btn.primary{background:linear-gradient(135deg,#5b94ff,#7a5bf1);border-color:transparent;box-shadow:0 10px 28px rgba(91,148,255,.2)}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn.ghost{background:rgba(255,255,255,.035)}
+.btn.danger{color:#ffd9d9}
+.btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
+
+.overlay{
+  position:fixed;z-index:100;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;
+  background:rgba(3,5,8,.7);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)
+}
+.overlay.hidden{display:none}
+.modal{width:min(560px,100%);border-radius:20px;padding:24px}
+.modal.wide{width:min(900px,100%)}
+.header-row{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#8e9abe}
+h1,h2,h3,p{margin:0}
+h1{font-size:31px;letter-spacing:-.035em}
+h2{font-size:23px;letter-spacing:-.02em}
+h3{font-size:13px}
+.sub{color:var(--muted);line-height:1.5;font-size:14px}
+.section{margin-top:20px}
+.field{display:grid;gap:7px;margin-top:12px}
+.field label{font-size:12px;color:#adb4c1}
+.input{
+  width:100%;height:46px;padding:0 13px;color:#fff;background:#080b10;
+  border:1px solid var(--border);border-radius:11px;outline:0;transition:.16s ease
+}
+.input:focus{border-color:rgba(104,160,255,.7);box-shadow:0 0 0 3px rgba(104,160,255,.12)}
+.tabs{display:flex;gap:6px;padding:4px;background:#090c11;border:1px solid var(--border);border-radius:12px;margin:18px 0}
+.tab{flex:1;height:36px;border-radius:9px;background:transparent;color:var(--muted);cursor:pointer}
+.tab.active{color:#fff;background:#171d28;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.row{display:flex;gap:8px;align-items:center;justify-content:flex-end}
+.actions-stack{display:grid;gap:8px;margin-top:16px}
+.status{min-height:18px;margin-top:11px;color:var(--muted);font-size:12px}
+.status.good{color:var(--good)}
+.status.error{color:var(--danger)}
+.loading-wrap{text-align:center}
+.spinner{
+  width:38px;height:38px;border-radius:50%;margin:0 auto 16px;
+  border:3px solid rgba(255,255,255,.1);border-top-color:#88aaff;animation:spin .8s linear infinite
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-title{font-size:16px;font-weight:700}
+.loading-detail{margin-top:6px;color:var(--muted);font-size:13px}
+.progress{height:5px;background:#0a0d12;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:16px}
+.progress>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .2s ease}
+
+.profile-head{
+  display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;
+  padding:15px;border:1px solid var(--border);border-radius:15px;background:rgba(255,255,255,.025)
+}
+.avatar-lg{
+  width:52px;height:52px;border-radius:15px;display:grid;place-items:center;font-size:20px;font-weight:800;
+  background:linear-gradient(135deg,#202b41,#151a25);border:1px solid var(--border)
+}
+.profile-meta strong{display:block;font-size:17px}
+.profile-meta span{display:block;color:var(--muted);font-size:12px;margin-top:3px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:14px}
+.stat{padding:14px;border-radius:14px;background:rgba(255,255,255,.025);border:1px solid var(--border)}
+.stat span{display:block;color:var(--muted);font-size:11px}
+.stat b{display:block;margin-top:5px;font-size:21px;letter-spacing:-.03em}
+.skin-card{
+  margin-top:14px;padding:14px;border-radius:14px;border:1px solid rgba(99,215,155,.14);
+  background:linear-gradient(180deg,rgba(99,215,155,.06),rgba(255,255,255,.02))
+}
+.skin-card strong{font-size:14px}
+.skin-card p{margin-top:5px;color:var(--muted);font-size:12px;line-height:1.45}
+
+.leader-wrap{margin-top:14px;border:1px solid var(--border);border-radius:15px;overflow:hidden}
+.leader-head,.leader-row{
+  display:grid;grid-template-columns:48px 1fr 90px 70px 70px 82px;gap:10px;align-items:center
+}
+.leader-head{padding:11px 13px;background:#0b0e14;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+.leader-row{padding:12px 13px;border-top:1px solid rgba(255,255,255,.055);font-size:13px}
+.leader-row.current{background:rgba(104,160,255,.065)}
+.player-cell{display:flex;align-items:center;gap:9px;min-width:0}
+.avatar-sm{width:29px;height:29px;border-radius:9px;background:#171d28;display:grid;place-items:center;font-size:11px;font-weight:800;flex:0 0 auto}
+.player-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rank{color:var(--muted)}
+.muted{color:var(--muted)}
+.empty{padding:34px;text-align:center;color:var(--muted);font-size:13px}
+.close{
+  width:34px;height:34px;border-radius:10px;color:#b9bfcc;background:rgba(255,255,255,.04);
+  border:1px solid var(--border);cursor:pointer
+}
+
+#welcomeOverlay{z-index:90}
+.welcome-card{width:min(700px,100%);padding:28px;border-radius:24px}
+.welcome-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:24px;align-items:stretch}
+.hero-copy{padding:18px 6px}
+.hero-copy h1{margin-top:6px;max-width:520px}
+.hero-copy .sub{margin-top:13px;max-width:490px}
+.hero-points{display:grid;gap:8px;margin-top:20px}
+.hero-point{padding:11px 12px;border:1px solid var(--border);background:rgba(255,255,255,.025);border-radius:12px;color:#c9ced8;font-size:12px}
+.auth-card{padding:18px;border-radius:18px}
+
+#gameHud.hidden{display:none}
+.setup{
+  position:fixed;z-index:120;left:16px;bottom:16px;max-width:460px;padding:13px 15px;border-radius:13px;
+  color:#ffe4c2;background:#241b10;border:1px solid #5c421f;font-size:12px
+}
+.toast{
+  position:fixed;z-index:150;left:50%;bottom:22px;transform:translate(-50%,16px);
+  opacity:0;pointer-events:none;padding:11px 14px;border-radius:12px;color:#fff;background:#121720;border:1px solid var(--border-strong);
+  box-shadow:0 18px 45px rgba(0,0,0,.35);transition:.2s ease;font-size:12px
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.error{border-color:rgba(255,119,119,.35)}
+#gameError{z-index:95}
+.game-error-card{width:min(520px,100%);padding:24px;border-radius:20px}
+
+@media(max-width:760px){
+  .topbar{top:10px;left:10px;right:10px}
+  .brand-copy span{display:none}
+  .actions .btn:nth-child(2){display:none}
+  .welcome-grid{grid-template-columns:1fr}
+  .welcome-card{padding:20px}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .leader-head,.leader-row{grid-template-columns:36px 1fr 72px 56px 56px}
+  .leader-head span:nth-last-child(1),.leader-row span:nth-last-child(1){display:none}
+}
+</style>
 </head>
 <body>
+
 <div id="gameContainer"></div>
-<div class="topbar">
-<button id="accountButton">Login</button>
-<button id="profileButton">Profile</button>
-<button id="leaderboardButton">Leaderboard</button>
+<div id="gameFrameCover"></div>
+
+<div id="gameHud" class="topbar hidden">
+  <div class="brand glass">
+    <div class="brand-mark"></div>
+    <div class="brand-copy"><strong>1v1.LOLNOW</strong><span>your account. your stats.</span></div>
+  </div>
+  <div class="actions">
+    <button class="btn glass" id="profileButton">Profile</button>
+    <button class="btn glass" id="leaderboardButton">Leaderboard</button>
+    <button class="btn primary" id="accountButton">Account</button>
+  </div>
 </div>
 
-<div id="setupWarning" class="setup" hidden>Firebase is not configured yet. Open <b>firebase-config.js</b> in the repository and replace the YOUR_ values with your Firebase Web App config.</div>
-
-<div id="homePanel" class="panel active">
-  <div class="card small"><h2>1v1.LOLNOW</h2><p class="muted">Play the game, sign in, keep your stats and appear on the live leaderboard.</p><button id="openAuth">Log in / Create account</button></div>
+<div id="setupWarning" class="setup" hidden>
+  Firebase is not configured correctly. Check <b>firebase-config.js</b> and your Firebase project settings.
 </div>
 
-<div id="authPanel" class="panel">
- <div class="card small"><button class="close" data-close>Close</button><h2 id="authTitle">Log in</h2>
-  <div class="tabs"><button id="loginTab" class="tab active">Log in</button><button id="signupTab" class="tab">Create account</button></div>
-  <form id="authForm" autocomplete="on" onsubmit="return false"><input id="email" name="email" type="email" autocomplete="email" placeholder="Email">
-  <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Password">
-  <div id="signupFields" hidden><input id="username" name="username" maxlength="20" autocomplete="username" placeholder="Username"></div></form>
-  <div class="actions"><button id="authSubmit"><span id="authSubmitText">Log in</span></button><button id="googleBtn">Continue with Google</button></div>
-  <p id="accountStatus" class="muted">Not signed in</p>
- </div>
+<div id="welcomeOverlay" class="overlay">
+  <div class="welcome-card glass">
+    <div class="welcome-grid">
+      <div class="hero-copy">
+        <div class="eyebrow">1v1.LOLNOW</div>
+        <h1>A cleaner way to play.</h1>
+        <p class="sub">Sign in once, load your profile, keep your stats and play with your account already connected.</p>
+        <div class="hero-points">
+          <div class="hero-point">Persistent account and username</div>
+          <div class="hero-point">Live leaderboard and match stats</div>
+          <div class="hero-point">Account entitlement bridge for the game client</div>
+        </div>
+      </div>
+      <div class="auth-card glass">
+        <div class="tabs">
+          <button class="tab active" id="loginTab">Log in</button>
+          <button class="tab" id="signupTab">Create account</button>
+        </div>
+
+        <form id="authForm">
+          <div class="field">
+            <label for="email">Email</label>
+            <input class="input" id="email" name="email" type="email" autocomplete="email" required placeholder="you@example.com">
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input class="input" id="password" name="password" type="password" autocomplete="current-password" minlength="6" required placeholder="Your password">
+          </div>
+          <div id="signupFields" hidden>
+            <div class="field">
+              <label for="username">Username</label>
+              <input class="input" id="username" name="username" autocomplete="username" maxlength="20" placeholder="3–20 characters">
+            </div>
+          </div>
+          <div class="actions-stack">
+            <button class="btn primary" id="authSubmit" type="submit"><span id="authSubmitText">Log in</span></button>
+            <button class="btn" id="googleBtn" type="button">Continue with Google</button>
+          </div>
+          <div id="authStatus" class="status">Your game will load automatically after sign in.</div>
+        </form>
+      </div>
+    </div>
+  </div>
 </div>
 
-<div id="accountPanel" class="panel">
- <div class="card small"><button class="close" data-close>Close</button><h2>Account</h2><p id="accountPanelStatus" class="muted">Not signed in</p><div class="actions"><button id="openProfile">Profile</button><button id="logoutBtn">Log out</button></div></div>
+<div id="loadingOverlay" class="overlay hidden">
+  <div class="modal glass">
+    <div class="loading-wrap">
+      <div class="spinner"></div>
+      <div class="loading-title" id="loadingTitle">Loading 1v1.LOLNOW</div>
+      <div class="loading-detail" id="loadingDetail">Preparing your account…</div>
+      <div class="progress"><i id="loadingProgress"></i></div>
+    </div>
+  </div>
 </div>
 
-<div id="profilePanel" class="panel">
- <div class="card"><button class="close" data-close>Close</button><h2 id="profileName">Player</h2><p id="profileEmail" class="muted"></p>
- <div class="grid"><div class="stat">Wins<b id="statWins">0</b></div><div class="stat">Losses<b id="statLosses">0</b></div><div class="stat">Matches<b id="statMatches">0</b></div><div class="stat">ELO<b id="statElo">1000</b></div><div class="stat">Kills<b id="statKills">0</b></div><div class="stat">Deaths<b id="statDeaths">0</b></div><div class="stat">Win rate<b id="statWinRate">0%</b></div><div class="stat">Skins<b id="skinStatus">Loading</b></div></div>
- <h3>Username</h3><input id="usernameInput" maxlength="20"><button id="saveUsernameBtn">Save username</button></div>
+<div id="profilePanel" class="overlay hidden">
+  <div class="modal wide glass">
+    <div class="header-row">
+      <div><div class="eyebrow">Account</div><h2 id="profileName">Player</h2><p class="sub" id="profileEmail"></p></div>
+      <button class="close" data-close="profilePanel">×</button>
+    </div>
+
+    <div class="section profile-head">
+      <div class="avatar-lg" id="profileAvatar">P</div>
+      <div class="profile-meta"><strong id="profileDisplayName">Player</strong><span id="profileStatus">All systems ready</span></div>
+      <div class="row"><button class="btn" id="saveUsernameBtn">Save username</button></div>
+    </div>
+
+    <div class="field"><label for="usernameInput">Username</label><input class="input" id="usernameInput" maxlength="20"></div>
+
+    <div class="stats">
+      <div class="stat"><span>Wins</span><b id="statWins">0</b></div>
+      <div class="stat"><span>Losses</span><b id="statLosses">0</b></div>
+      <div class="stat"><span>Matches</span><b id="statMatches">0</b></div>
+      <div class="stat"><span>ELO</span><b id="statElo">1000</b></div>
+      <div class="stat"><span>Kills</span><b id="statKills">0</b></div>
+      <div class="stat"><span>Deaths</span><b id="statDeaths">0</b></div>
+      <div class="stat"><span>Win rate</span><b id="statWinRate">0%</b></div>
+      <div class="stat"><span>Skin access</span><b id="skinStatus">Loading</b></div>
+    </div>
+
+    <div class="skin-card">
+      <strong id="skinTitle">All skins unlocked</strong>
+      <p id="skinDescription">Your account entitlement is being sent to the game client when the game starts.</p>
+    </div>
+  </div>
 </div>
 
-<div id="leaderboardPanel" class="panel">
- <div class="card"><button class="close" data-close>Close</button><h2>Live leaderboard</h2><p class="muted">Updates automatically when player records change.</p>
-  <div class="leader"><div class="leader-row muted"><span>#</span><span>Player</span><span>ELO</span><span>W</span><span>L</span><span>WR</span></div><div id="leaderboardBody"><div class="loading">Loading...</div></div></div>
- </div>
+<div id="leaderboardPanel" class="overlay hidden">
+  <div class="modal wide glass">
+    <div class="header-row">
+      <div><div class="eyebrow">Competitive</div><h2>Live leaderboard</h2><p class="sub">Ranks update as player records change.</p></div>
+      <button class="close" data-close="leaderboardPanel">×</button>
+    </div>
+    <div class="leader-wrap">
+      <div class="leader-head"><span>#</span><span>Player</span><span>ELO</span><span>W</span><span>L</span><span>WR</span></div>
+      <div id="leaderboardBody"><div class="empty">Loading leaderboard…</div></div>
+    </div>
+  </div>
 </div>
+
+<div id="accountPanel" class="overlay hidden">
+  <div class="modal glass">
+    <div class="header-row">
+      <div><div class="eyebrow">Account</div><h2 id="accountTitle">Account</h2><p class="sub" id="accountSubtitle">Signed out</p></div>
+      <button class="close" data-close="accountPanel">×</button>
+    </div>
+    <div class="actions-stack">
+      <button class="btn" id="accountProfile">Open profile</button>
+      <button class="btn danger" id="logoutBtn">Log out</button>
+    </div>
+  </div>
+</div>
+
+<div id="gameError" class="overlay hidden">
+  <div class="game-error-card glass">
+    <div class="eyebrow">Game launch</div>
+    <h2 style="margin-top:6px">The game could not start.</h2>
+    <p class="sub" id="gameErrorText" style="margin-top:8px">The Unity client failed to initialize.</p>
+    <div class="actions" style="margin-top:18px"><button class="btn primary" id="retryGameBtn">Try again</button><button class="btn" id="logoutFromError">Log out</button></div>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <script>
-let db=null;
-const state={user:null,profile:null,leaderboardUnsubscribe:null,profileUnsubscribe:null};
-const $=id=>document.getElementById(id);
-const configured=window.ONEVONE_FIREBASE_CONFIG && window.ONEVONE_FIREBASE_CONFIG.apiKey && !window.ONEVONE_FIREBASE_CONFIG.apiKey.startsWith("YOUR_");
+(function(){
+  "use strict";
 
-function toast(message,error=false){const e=$("toast");e.textContent=message;e.className="toast show"+(error?" error":"");clearTimeout(window.__toast);window.__toast=setTimeout(()=>e.className="toast",3000)}
-function panel(id){document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));$(id).classList.add("active")}
-function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
-function authError(e){return ({'auth/invalid-email':'Enter a valid email.','auth/email-already-in-use':'That email is already registered.','auth/weak-password':'Use a stronger password.','auth/wrong-password':'Incorrect email or password.','auth/user-not-found':'No account exists with that email.','auth/popup-closed-by-user':'Login window closed.','auth/too-many-requests':'Too many attempts. Try again later.'})[e.code]||e.message||'Authentication failed.'}
+  var db=null;
+  var gameInstance=null;
+  var gameStarted=false;
+  var authResolved=false;
+  var mode="login";
+  var state={user:null,profile:null,leaderboardUnsubscribe:null,profileUnsubscribe:null};
+  var $=function(id){return document.getElementById(id);};
+  var configured=!!(window.ONEVONE_FIREBASE_CONFIG&&window.ONEVONE_FIREBASE_CONFIG.apiKey&&!String(window.ONEVONE_FIREBASE_CONFIG.apiKey).startsWith("YOUR_"));
 
-async function ensureProfile(user){
- const ref=db.collection("players").doc(user.uid), snap=await ref.get();
- if(snap.exists)return snap.data();
- let username=(user.displayName||(user.email||"player").split("@")[0]).replace(/[^a-zA-Z0-9_ -]/g,"").slice(0,20)||"player";
- const profile={username,usernameLower:username.toLowerCase(),email:user.email||"",avatar:user.photoURL||"",wins:0,losses:0,matches:0,kills:0,deaths:0,elo:1000,winRate:0,equippedSkin:"default",allSkinsUnlocked:true,publicProfile:true,createdAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
- const clash=await db.collection("players").where("publicProfile","==",true).where("usernameLower","==",profile.usernameLower).limit(1).get();
- if(!clash.empty){username=username+"_"+Math.floor(Math.random()*9999);profile.username=username;profile.usernameLower=username.toLowerCase()}
- await ref.set(profile);return profile;
-}
-function render(){
- const p=state.profile;if(!p)return;
- $("profileName").textContent=p.username||"Player";$("profileEmail").textContent=state.user?.email||"";
- $("statWins").textContent=p.wins||0;$("statLosses").textContent=p.losses||0;$("statMatches").textContent=p.matches||0;
- $("statKills").textContent=p.kills||0;$("statDeaths").textContent=p.deaths||0;$("statElo").textContent=p.elo||1000;
- $("statWinRate").textContent=Number(p.winRate||0).toFixed(1)+"%";$("skinStatus").textContent=p.allSkinsUnlocked?"Every skin unlocked":"Standard collection";
- $("usernameInput").value=p.username||"";
-}
-async function login(){try{await firebase.auth().signInWithEmailAndPassword($("email").value.trim(),$("password").value);toast("Signed in.")}catch(e){toast(authError(e),true)}}
-async function signup(){
- const email=$("email").value.trim(),password=$("password").value,username=$("username").value.trim();
- if(!/^[a-zA-Z0-9_ -]{3,20}$/.test(username)){toast("Username must be 3–20 valid characters.",true);return}
- try{const q=await db.collection("players").where("publicProfile","==",true).where("usernameLower","==",username.toLowerCase()).limit(1).get();if(!q.empty){toast("Username already taken.",true);return}
- const c=await firebase.auth().createUserWithEmailAndPassword(email,password);await c.user.updateProfile({displayName:username});await ensureProfile(c.user);toast("Account created.")}
- catch(e){toast(authError(e),true)}
-}
-async function google(){try{const r=await firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider());await ensureProfile(r.user);toast("Signed in with Google.")}catch(e){toast(authError(e),true)}}
-async function logout(){await firebase.auth().signOut();panel("homePanel");toast("Signed out.")}
-async function saveUsername(){
- if(!state.user)return;const username=$("usernameInput").value.trim();if(!/^[a-zA-Z0-9_ -]{3,20}$/.test(username)){toast("Invalid username.",true);return}
- try{const q=await db.collection("players").where("publicProfile","==",true).where("usernameLower","==",username.toLowerCase()).limit(1).get();if(!q.empty&&q.docs[0].id!==state.user.uid){toast("Username already taken.",true);return}
- await db.collection("players").doc(state.user.uid).update({username,usernameLower:username.toLowerCase(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()});await state.user.updateProfile({displayName:username});toast("Username updated.")}
- catch(e){toast(e.message,true)}
-}
-function leaderboard(){
- if(state.leaderboardUnsubscribe)state.leaderboardUnsubscribe();
- state.leaderboardUnsubscribe=db.collection("players").where("publicProfile","==",true).orderBy("elo","desc").limit(100).onSnapshot(s=>{
-  $("leaderboardBody").innerHTML=s.docs.map((d,i)=>{const p=d.data();return '<div class="leader-row'+(state.user&&d.id===state.user.uid?" current":"")+'"><span>'+ (i+1)+'</span><span class="player"><span class="avatar">'+(p.username||"?").charAt(0).toUpperCase()+'</span>'+escapeHtml(p.username||"Player")+'</span><span>'+ (p.elo||1000)+'</span><span>'+(p.wins||0)+'</span><span>'+(p.losses||0)+'</span><span>'+Number(p.winRate||0).toFixed(1)+'%</span></div>'}).join("")||'<div class="empty">No players yet.</div>'
- },()=>{$("leaderboardBody").innerHTML='<div class="empty">Leaderboard unavailable.</div>'});
-}
-window.recordMatchResult=async result=>{
- if(!state.user||!result||typeof result.won!=="boolean")return;
- const ref=db.collection("players").doc(state.user.uid);
- await db.runTransaction(async t=>{const s=await t.get(ref);if(!s.exists)throw Error("Profile missing");const p=s.data(),wins=Number(p.wins||0)+(result.won?1:0),losses=Number(p.losses||0)+(result.won?0:1),matches=wins+losses;
- const elo=Math.max(0,Number(p.elo||1000)+(result.won?25:-20));t.update(ref,{wins,losses,matches,kills:Number(p.kills||0)+Number(result.kills||0),deaths:Number(p.deaths||0)+Number(result.deaths||0),elo,winRate:matches?wins/matches*100:0,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
- t.set(db.collection("matches").doc(),{playerId:state.user.uid,opponentId:result.opponentId||null,won:result.won,kills:Number(result.kills||0),deaths:Number(result.deaths||0),mode:result.mode||"1v1",createdAt:firebase.firestore.FieldValue.serverTimestamp()})});
-};
-window.setAllSkinsUnlocked=async()=>{if(!state.user)throw Error("Login required");await db.collection("players").doc(state.user.uid).update({allSkinsUnlocked:true})};
+  function toast(message,error){
+    var e=$("toast");
+    e.textContent=message;
+    e.className="toast show"+(error?" error":"");
+    clearTimeout(window.__toastTimer);
+    window.__toastTimer=setTimeout(function(){e.className="toast";},3200);
+  }
 
-document.addEventListener("DOMContentLoaded",()=>{
- $("accountButton").onclick=()=>panel("accountPanel");$("profileButton").onclick=()=>state.user?panel("profilePanel"):panel("authPanel");$("leaderboardButton").onclick=()=>panel("leaderboardPanel");
- $("openAuth").onclick=()=>panel("authPanel");$("openProfile").onclick=()=>state.user?panel("profilePanel"):panel("authPanel");
- $("loginBtn")?.addEventListener("click",login);$("signupBtn")?.addEventListener("click",signup);$("googleBtn").onclick=google;$("logoutBtn").onclick=logout;$("saveUsernameBtn").onclick=saveUsername;
- $("authSubmit").onclick=login;$("loginTab").onclick=()=>{ $("signupFields").hidden=true;$("loginTab").classList.add("active");$("signupTab").classList.remove("active");$("authTitle").textContent="Log in";$("authSubmitText").textContent="Log in";$("authSubmit").onclick=login};
- $("signupTab").onclick=()=>{$("signupFields").hidden=false;$("signupTab").classList.add("active");$("loginTab").classList.remove("active");$("authTitle").textContent="Create account";$("authSubmitText").textContent="Create account";$("authSubmit").onclick=signup};
- document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>panel("homePanel"));
- if(!configured){$("setupWarning").hidden=false;return}
- try{
-   firebase.initializeApp(window.ONEVONE_FIREBASE_CONFIG);
-   db=firebase.firestore();
-   leaderboard();
- }catch(e){
-   console.error(e);
-   $("setupWarning").hidden=false;
-   $("setupWarning").textContent="Firebase could not start. Check firebase-config.js and your Firebase project settings.";
- }
- firebase.auth().onAuthStateChanged(async user=>{state.user=user;if(user){state.profile=await ensureProfile(user);state.profileUnsubscribe&&state.profileUnsubscribe();state.profileUnsubscribe=db.collection("players").doc(user.uid).onSnapshot(s=>{state.profile=s.data();render();$("accountButton").textContent=state.profile?.username||"Account"});render();}else{$("accountButton").textContent="Login";state.profile=null}});
-});
+  function show(id){$(id).classList.remove("hidden");}
+  function hide(id){$(id).classList.add("hidden");}
+
+  function setLoading(title,detail,progress){
+    show("loadingOverlay");
+    $("loadingTitle").textContent=title;
+    $("loadingDetail").textContent=detail;
+    $("loadingProgress").style.width=Math.max(0,Math.min(100,progress||0))+"%";
+  }
+
+  function setAuthBusy(busy,label){
+    var b=$("authSubmit");
+    b.disabled=busy;
+    $("googleBtn").disabled=busy;
+    $("authSubmitText").textContent=label||("login"===mode?"Log in":"Create account");
+  }
+
+  function authError(e){
+    var map={
+      "auth/invalid-email":"Enter a valid email.",
+      "auth/email-already-in-use":"That email is already registered.",
+      "auth/weak-password":"Use a password with at least 6 characters.",
+      "auth/wrong-password":"Incorrect email or password.",
+      "auth/user-not-found":"No account exists with that email.",
+      "auth/invalid-credential":"The email or password is incorrect.",
+      "auth/popup-closed-by-user":"Login window closed.",
+      "auth/popup-blocked":"Your browser blocked the Google login popup.",
+      "auth/too-many-requests":"Too many attempts. Try again later.",
+      "auth/network-request-failed":"Network request failed. Check your connection."
+    };
+    return map[e.code]||e.message||"Authentication failed.";
+  }
+
+  function showAuthStatus(message,error){
+    $("authStatus").textContent=message;
+    $("authStatus").className="status"+(error?" error":"");
+  }
+
+  function switchMode(next){
+    mode=next;
+    var signup=next==="signup";
+    $("signupFields").hidden=!signup;
+    $("loginTab").classList.toggle("active",!signup);
+    $("signupTab").classList.toggle("active",signup);
+    $("authSubmitText").textContent=signup?"Create account":"Log in";
+    $("password").autocomplete=signup?"new-password":"current-password";
+    showAuthStatus(signup?"Create your account, then the game will load automatically.":"Sign in to continue into the game.",false);
+  }
+
+  async function ensureProfile(user){
+    var ref=db.collection("players").doc(user.uid);
+    var snap=await ref.get();
+    if(snap.exists)return snap.data();
+
+    var base=(user.displayName||(user.email||"player").split("@")[0])
+      .replace(/[^a-zA-Z0-9_ -]/g,"").slice(0,20)||"player";
+
+    var profile={
+      username:base,
+      usernameLower:base.toLowerCase(),
+      email:user.email||"",
+      avatar:user.photoURL||"",
+      wins:0,losses:0,matches:0,kills:0,deaths:0,elo:1000,winRate:0,
+      equippedSkin:"default",
+      allSkinsUnlocked:true,
+      publicProfile:true,
+      createdAt:firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    var clash=await db.collection("players")
+      .where("publicProfile","==",true)
+      .where("usernameLower","==",profile.usernameLower)
+      .limit(1).get();
+
+    if(!clash.empty){
+      profile.username=base+"_"+Math.floor(Math.random()*9999);
+      profile.usernameLower=profile.username.toLowerCase();
+    }
+
+    await ref.set(profile);
+    return profile;
+  }
+
+  function renderProfile(){
+    var p=state.profile;
+    if(!p)return;
+    var name=p.username||"Player";
+    var letter=name.charAt(0).toUpperCase()||"P";
+    $("profileName").textContent=name;
+    $("profileDisplayName").textContent=name;
+    $("profileEmail").textContent=state.user&&state.user.email||"";
+    $("profileAvatar").textContent=letter;
+    $("usernameInput").value=name;
+
+    $("statWins").textContent=Number(p.wins||0);
+    $("statLosses").textContent=Number(p.losses||0);
+    $("statMatches").textContent=Number(p.matches||0);
+    $("statElo").textContent=Number(p.elo||1000);
+    $("statKills").textContent=Number(p.kills||0);
+    $("statDeaths").textContent=Number(p.deaths||0);
+    $("statWinRate").textContent=Number(p.winRate||0).toFixed(1)+"%";
+
+    var unlocked=p.allSkinsUnlocked===true;
+    $("skinStatus").textContent=unlocked?"Unlocked":"Standard";
+    $("skinTitle").textContent=unlocked?"All skins unlocked":"Standard skin access";
+    $("skinDescription").textContent=unlocked
+      ?"Your account entitlement is sent to the Unity client before and after startup."
+      :"Your account currently does not have the full skin entitlement.";
+    $("profileStatus").textContent=unlocked?"Game entitlements ready":"Game profile ready";
+    $("accountButton").textContent=name;
+    $("accountTitle").textContent=name;
+    $("accountSubtitle").textContent=(state.user&&state.user.email)||"Signed in";
+  }
+
+  function applyGameEntitlements(){
+    var p=state.profile||{};
+    var unlocked=p.allSkinsUnlocked===true;
+    var entitlement={
+      uid:state.user&&state.user.uid||null,
+      username:p.username||"",
+      avatar:p.avatar||"",
+      allSkinsUnlocked:unlocked,
+      equippedSkin:p.equippedSkin||"default"
+    };
+
+    window.ONEVONE_GAME_PROFILE=entitlement;
+    window.ONEVONE_ALL_SKINS_UNLOCKED=unlocked;
+
+    var payload=JSON.stringify(entitlement);
+    try{
+      localStorage.setItem("onevone.profile",payload);
+      localStorage.setItem("onevone.allSkinsUnlocked",unlocked?"true":"false");
+      localStorage.setItem("allSkinsUnlocked",unlocked?"true":"false");
+      localStorage.setItem("allSkins","true"===unlocked?"true":"false");
+    }catch(e){}
+
+    try{
+      sessionStorage.setItem("onevone.profile",payload);
+      sessionStorage.setItem("onevone.allSkinsUnlocked",unlocked?"true":"false");
+    }catch(e){}
+
+    window.dispatchEvent(new CustomEvent("onevone:user-ready",{detail:entitlement}));
+  }
+
+  function sendEntitlementsToUnity(){
+    applyGameEntitlements();
+
+    if(!gameInstance||typeof gameInstance.SendMessage!=="function")return;
+
+    var payload=JSON.stringify(window.ONEVONE_GAME_PROFILE||{});
+    var calls=[
+      ["MainMenuManagers","SetUserData",payload],
+      ["MainMenuManagers","SetPlayerData",payload],
+      ["MainMenuManagers","SetAccountData",payload],
+      ["MainMenuManagers","SetAllSkinsUnlocked","true"],
+      ["MainMenuManagers","SetAllSkins","true"],
+      ["MainMenuManagers","OnWebCallback",""]
+    ];
+
+    calls.forEach(function(c){
+      try{gameInstance.SendMessage(c[0],c[1],c[2]);}catch(e){}
+    });
+
+    if(typeof window.sendConfig==="function"){
+      try{window.sendConfig();}catch(e){}
+    }
+
+    window.dispatchEvent(new CustomEvent("onevone:entitlements-ready",{detail:window.ONEVONE_GAME_PROFILE||{}}));
+  }
+
+  function setGameProgress(progress,detail){
+    if(gameStarted&&$("loadingOverlay").classList.contains("hidden"))return;
+    setLoading("Loading 1v1.LOLNOW",detail||"Loading the game…",progress);
+  }
+
+  function startGame(){
+    if(gameStarted)return;
+    if(!window.UnityLoader||typeof window.UnityLoader.instantiate!=="function"){
+      showGameError("The Unity loader did not load. This is usually caused by the game CDN being blocked or unavailable.");
+      return;
+    }
+
+    gameStarted=true;
+    setLoading("Loading 1v1.LOLNOW","Starting the Unity client…",8);
+    applyGameEntitlements();
+
+    try{
+      gameInstance=window.UnityLoader.instantiate(
+        "gameContainer",
+        "https://onecloudcdn.site/build.json",
+        {
+          onProgress:function(instance,progress){
+            var percent=Math.round((Number(progress)||0)*100);
+            setGameProgress(Math.min(98,Math.max(10,percent)),"Loading game assets… "+percent+"%");
+          },
+          Module:{
+            onRuntimeInitialized:function(){
+              setLoading("Loading 1v1.LOLNOW","Applying your account…",100);
+              sendEntitlementsToUnity();
+              setTimeout(function(){
+                hide("loadingOverlay");
+                show("gameHud");
+              },700);
+            }
+          }
+        }
+      );
+      window.unityInstance=gameInstance;
+
+      // Keep the compatibility callbacks used by the original Unity build.
+      window.unityAdFinishedCallback=function(){
+        try{if(gameInstance)gameInstance.SendMessage("MainMenuManagers","OnWebCallback");}catch(e){}
+      };
+      window.requestNewAd=function(){window.unityAdFinishedCallback();};
+      window.showAds=function(){};
+      window.onUnityReady=function(){
+        sendEntitlementsToUnity();
+      };
+    }catch(e){
+      console.error(e);
+      gameStarted=false;
+      showGameError(e&&e.message?e.message:"Unity failed to initialize.");
+    }
+  }
+
+  function showGameError(message){
+    hide("loadingOverlay");
+    $("gameErrorText").textContent=message;
+    show("gameError");
+  }
+
+  async function login(){
+    if(!configured){showAuthStatus("Firebase is not configured.",true);return;}
+    var email=$("email").value.trim(),password=$("password").value;
+    setAuthBusy(true,"Signing in…");
+    try{
+      await firebase.auth().signInWithEmailAndPassword(email,password);
+      showAuthStatus("Signed in. Loading your account…",false);
+    }catch(e){
+      showAuthStatus(authError(e),true);
+      setAuthBusy(false);
+    }
+  }
+
+  async function signup(){
+    if(!configured){showAuthStatus("Firebase is not configured.",true);return;}
+    var email=$("email").value.trim(),password=$("password").value,username=$("username").value.trim();
+
+    if(!/^[a-zA-Z0-9_ -]{3,20}$/.test(username)){
+      showAuthStatus("Username must be 3–20 valid characters.",true);return;
+    }
+
+    setAuthBusy(true,"Creating account…");
+    try{
+      var q=await db.collection("players")
+        .where("publicProfile","==",true)
+        .where("usernameLower","==",username.toLowerCase())
+        .limit(1).get();
+
+      if(!q.empty){showAuthStatus("That username is already taken.",true);setAuthBusy(false);return;}
+
+      var c=await firebase.auth().createUserWithEmailAndPassword(email,password);
+      await c.user.updateProfile({displayName:username});
+      await ensureProfile(c.user);
+      showAuthStatus("Account created. Loading your profile…",false);
+    }catch(e){
+      showAuthStatus(authError(e),true);
+      setAuthBusy(false);
+    }
+  }
+
+  async function google(){
+    if(!configured){showAuthStatus("Firebase is not configured.",true);return;}
+    setAuthBusy(true,"Connecting…");
+    try{
+      var provider=new firebase.auth.GoogleAuthProvider();
+      var r=await firebase.auth().signInWithPopup(provider);
+      await ensureProfile(r.user);
+      showAuthStatus("Signed in. Loading your account…",false);
+    }catch(e){
+      showAuthStatus(authError(e),true);
+      setAuthBusy(false);
+    }
+  }
+
+  async function saveUsername(){
+    if(!state.user)return;
+    var username=$("usernameInput").value.trim();
+    if(!/^[a-zA-Z0-9_ -]{3,20}$/.test(username)){toast("Invalid username.",true);return;}
+
+    try{
+      var q=await db.collection("players")
+        .where("publicProfile","==",true)
+        .where("usernameLower","==",username.toLowerCase())
+        .limit(1).get();
+
+      if(!q.empty&&q.docs[0].id!==state.user.uid){toast("Username already taken.",true);return;}
+
+      await db.collection("players").doc(state.user.uid).update({
+        username:username,
+        usernameLower:username.toLowerCase(),
+        updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+      });
+      await state.user.updateProfile({displayName:username});
+      toast("Username updated.");
+    }catch(e){toast(e.message||"Could not update username.",true);}
+  }
+
+  function leaderboard(){
+    if(!db)return;
+    if(state.leaderboardUnsubscribe)state.leaderboardUnsubscribe();
+
+    // Read public profiles only, then sort client-side to avoid requiring a composite index.
+    state.leaderboardUnsubscribe=db.collection("players")
+      .where("publicProfile","==",true)
+      .limit(250)
+      .onSnapshot(function(snap){
+        var rows=snap.docs.map(function(doc){return {id:doc.id,data:doc.data()};});
+        rows.sort(function(a,b){return Number(b.data.elo||1000)-Number(a.data.elo||1000);});
+
+        $("leaderboardBody").innerHTML=rows.slice(0,100).map(function(item,index){
+          var p=item.data;
+          var name=p.username||"Player";
+          var avatar=(name.charAt(0)||"?").toUpperCase();
+          var current=state.user&&item.id===state.user.uid;
+          return '<div class="leader-row'+(current?" current":"")+'">'+
+            '<span class="rank">'+(index+1)+'</span>'+
+            '<span class="player-cell"><span class="avatar-sm">'+avatar+'</span><span class="player-name">'+escapeHtml(name)+'</span></span>'+
+            '<span>'+Number(p.elo||1000)+'</span>'+
+            '<span>'+Number(p.wins||0)+'</span>'+
+            '<span>'+Number(p.losses||0)+'</span>'+
+            '<span>'+Number(p.winRate||0).toFixed(1)+'%</span>'+
+          '</div>';
+        }).join("")||'<div class="empty">No public players yet.</div>';
+      },function(error){
+        console.error(error);
+        $("leaderboardBody").innerHTML='<div class="empty">Leaderboard unavailable. Check the Firestore rules published in Firebase.</div>';
+      });
+  }
+
+  function escapeHtml(v){
+    return String(v).replace(/[&<>"']/g,function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c];
+    });
+  }
+
+  window.recordMatchResult=async function(result){
+    if(!state.user||!result||typeof result.won!=="boolean")return;
+    var ref=db.collection("players").doc(state.user.uid);
+    await db.runTransaction(async function(t){
+      var snap=await t.get(ref);
+      if(!snap.exists)throw Error("Profile missing.");
+      var p=snap.data();
+      var wins=Number(p.wins||0)+(result.won?1:0);
+      var losses=Number(p.losses||0)+(result.won?0:1);
+      var matches=wins+losses;
+      var elo=Math.max(0,Number(p.elo||1000)+(result.won?25:-20));
+
+      t.update(ref,{
+        wins:wins,losses:losses,matches:matches,
+        kills:Number(p.kills||0)+Number(result.kills||0),
+        deaths:Number(p.deaths||0)+Number(result.deaths||0),
+        elo:elo,winRate:matches?(wins/matches*100):0,
+        updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      t.set(db.collection("matches").doc(),{
+        playerId:state.user.uid,
+        opponentId:result.opponentId||null,
+        won:result.won,
+        kills:Number(result.kills||0),
+        deaths:Number(result.deaths||0),
+        mode:result.mode||"1v1",
+        createdAt:firebase.firestore.FieldValue.serverTimestamp()
+      });
+    });
+  };
+
+  window.setAllSkinsUnlocked=async function(){
+    if(!state.user)throw Error("Login required.");
+    await db.collection("players").doc(state.user.uid).update({allSkinsUnlocked:true});
+    if(state.profile)state.profile.allSkinsUnlocked=true;
+    sendEntitlementsToUnity();
+  };
+
+  async function logout(){
+    try{
+      if(state.profileUnsubscribe)state.profileUnsubscribe();
+      if(state.leaderboardUnsubscribe)state.leaderboardUnsubscribe();
+      await firebase.auth().signOut();
+      state.user=null;state.profile=null;gameInstance=null;gameStarted=false;
+      hide("gameHud");hide("profilePanel");hide("leaderboardPanel");hide("accountPanel");
+      show("welcomeOverlay");
+      showAuthStatus("Signed out. Log in to continue.",false);
+    }catch(e){toast(e.message||"Could not sign out.",true);}
+  }
+
+  document.addEventListener("DOMContentLoaded",function(){
+    $("loginTab").onclick=function(){switchMode("login");};
+    $("signupTab").onclick=function(){switchMode("signup");};
+
+    $("authForm").addEventListener("submit",function(e){
+      e.preventDefault();
+      if(mode==="signup")signup();else login();
+    });
+
+    $("googleBtn").onclick=google;
+
+    $("profileButton").onclick=function(){if(state.user)show("profilePanel");else showAuthStatus("Log in to open your profile.",true);};
+    $("leaderboardButton").onclick=function(){show("leaderboardPanel");};
+    $("accountButton").onclick=function(){show("accountPanel");};
+    $("accountProfile").onclick=function(){hide("accountPanel");show("profilePanel");};
+    $("logoutBtn").onclick=logout;
+    $("saveUsernameBtn").onclick=saveUsername;
+    $("retryGameBtn").onclick=function(){hide("gameError");gameStarted=false;startGame();};
+    $("logoutFromError").onclick=logout;
+
+    document.querySelectorAll("[data-close]").forEach(function(btn){
+      btn.addEventListener("click",function(){hide(btn.getAttribute("data-close"));});
+    });
+
+    if(!configured){
+      $("setupWarning").hidden=false;
+      return;
+    }
+
+    try{
+      firebase.initializeApp(window.ONEVONE_FIREBASE_CONFIG);
+      db=firebase.firestore();
+      leaderboard();
+    }catch(e){
+      console.error(e);
+      $("setupWarning").hidden=false;
+      return;
+    }
+
+    firebase.auth().onAuthStateChanged(async function(user){
+      state.user=user;
+
+      if(!user){
+        authResolved=true;
+        hide("loadingOverlay");
+        hide("gameHud");
+        show("welcomeOverlay");
+        return;
+      }
+
+      if(!authResolved||!gameStarted){
+        authResolved=true;
+        setLoading("Loading your account","Checking profile and game entitlements…",12);
+      }
+
+      try{
+        state.profile=await ensureProfile(user);
+        renderProfile();
+
+        if(state.profileUnsubscribe)state.profileUnsubscribe();
+        state.profileUnsubscribe=db.collection("players").doc(user.uid).onSnapshot(function(snap){
+          state.profile=snap.data();
+          renderProfile();
+          if(gameInstance)sendEntitlementsToUnity();
+        });
+
+        applyGameEntitlements();
+        hide("welcomeOverlay");
+
+        if(!gameStarted){
+          setLoading("Loading 1v1.LOLNOW","Starting the game client…",18);
+          startGame();
+        }
+      }catch(e){
+        console.error(e);
+        hide("loadingOverlay");
+        show("welcomeOverlay");
+        showAuthStatus(e.message||"Could not load your account.",true);
+        setAuthBusy(false);
+      }
+    });
+  });
+})();
 </script>
 </body>
 </html>
