@@ -2,43 +2,129 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>1v1.LOL</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>1v1.LOLNOW</title>
 <link rel="icon" href="https://onecloudcdn.site/favicon.ico">
-<link rel="stylesheet" href="https://onecloudcdn.site/style/style.css">
-<style>
-html,body{margin:0;padding:0;width:100%;height:100%;background:#000;overflow:hidden;}
-#gameContainer{width:100%;height:calc(100vh - 30px);margin:0;background:#000;}
-.credit{height:30px;line-height:30px;margin:0;text-align:center;font:13px system-ui,sans-serif;background:#0b1120;color:#8a93a6;}
-.credit a{color:#4c9eff;text-decoration:none;font-weight:600;}
-</style>
-<script>!function(){console.log=function(){};console.info=function(){};console.debug=function(){};}();</script>
 <script src="https://www.gstatic.com/firebasejs/7.24.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/7.24.0/firebase-auth.js"></script>
 <script src="https://www.gstatic.com/firebasejs/7.24.0/firebase-firestore.js"></script>
-<script src="https://www.gstatic.com/firebasejs/7.24.0/firebase-remote-config.js"></script>
-<script src="https://onecloudcdn.site/server-mock.js"></script>
-<script src="https://onecloudcdn.site/UnityLoader.js"></script>
-<script src="https://onecloudcdn.site/UnityProgress.js"></script>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:#050608;color:#f5f7fb;font-family:Inter,system-ui,sans-serif}body{overflow:hidden}#gameContainer{position:fixed;inset:0;background:#000}.topbar{position:fixed;z-index:20;top:14px;left:50%;transform:translateX(-50%);display:flex;gap:8px;padding:7px;background:rgba(9,11,16,.88);border:1px solid #252a35;border-radius:12px;backdrop-filter:blur(14px)}button{border:1px solid #2d3442;background:#11151d;color:#e8ecf4;border-radius:8px;padding:9px 13px;font-weight:700;cursor:pointer}button:hover{background:#191f2a}.logged-in{border-color:#4b8cff}.panel{display:none;position:fixed;z-index:30;inset:0;background:rgba(0,0,0,.66);align-items:center;justify-content:center;padding:20px}.panel.active{display:flex}.card{width:min(720px,100%);max-height:90vh;overflow:auto;background:#0d1016;border:1px solid #292f3b;border-radius:16px;padding:24px;box-shadow:0 20px 80px #000}.small{width:min(430px,100%)}h1,h2{margin:0 0 14px}input{width:100%;padding:11px 12px;margin:6px 0;background:#080a0e;border:1px solid #2a303b;border-radius:8px;color:#fff;outline:none}.tabs,.actions{display:flex;gap:8px;margin:12px 0}.tab.active{background:#fff;color:#080a0e}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.stat{padding:14px;background:#11151d;border:1px solid #252b36;border-radius:10px}.stat b{display:block;font-size:22px;margin-top:4px}.leader{border:1px solid #252b36;border-radius:10px;overflow:hidden}.leader-row{display:grid;grid-template-columns:45px 1fr repeat(4,70px);gap:8px;padding:11px;border-top:1px solid #20252e;align-items:center}.leader-row:first-child{border-top:0}.player{display:flex;align-items:center;gap:9px}.avatar{width:28px;height:28px;border-radius:50%;background:#1e2735;display:grid;place-items:center;font-size:12px}.current{background:#121c2b}.muted{color:#8e97a8}.close{float:right}.toast{position:fixed;z-index:50;left:50%;bottom:24px;transform:translateX(-50%) translateY(15px);opacity:0;padding:11px 15px;background:#121720;border:1px solid #303846;border-radius:9px;transition:.2s}.toast.show{opacity:1;transform:translateX(-50%)}.toast.error{border-color:#8c3d3d}.setup{position:fixed;z-index:25;left:20px;bottom:20px;background:#261b0b;border:1px solid #65471c;padding:12px;border-radius:10px;max-width:420px}.loading,.empty{padding:20px;color:#8e97a8;text-align:center}@media(max-width:650px){.grid{grid-template-columns:repeat(2,1fr)}.leader-row{grid-template-columns:35px 1fr repeat(2,55px)}.leader-row span:nth-last-child(-n+2){display:none}}
+</style>
+<script src="firebase-config.js"></script>
 </head>
 <body>
-<div class="webgl-content">
 <div id="gameContainer"></div>
+<div class="topbar">
+<button id="accountButton">Login</button>
+<button id="profileButton">Profile</button>
+<button id="leaderboardButton">Leaderboard</button>
 </div>
-<p class="credit"><a href="" target="_blank"></a></p>
-<script src="https://onecloudcdn.site/firebase.js"></script>
-<script src="https://onecloudcdn.site/login.js"></script>
-<script src="https://onecloudcdn.site/firebase-config.js"></script>
+
+<div id="setupWarning" class="setup" hidden>Firebase is not configured yet. Open <b>firebase-config.js</b> in the repository and replace the YOUR_ values with your Firebase Web App config.</div>
+
+<div id="homePanel" class="panel active">
+  <div class="card small"><h2>1v1.LOLNOW</h2><p class="muted">Play the game, sign in, keep your stats and appear on the live leaderboard.</p><button id="openAuth">Log in / Create account</button></div>
+</div>
+
+<div id="authPanel" class="panel">
+ <div class="card small"><button class="close" data-close>Close</button><h2 id="authTitle">Log in</h2>
+  <div class="tabs"><button id="loginTab" class="tab active">Log in</button><button id="signupTab" class="tab">Create account</button></div>
+  <input id="email" type="email" placeholder="Email">
+  <input id="password" type="password" placeholder="Password">
+  <div id="signupFields" hidden><input id="username" maxlength="20" placeholder="Username"></div>
+  <div class="actions"><button id="authSubmit"><span id="authSubmitText">Log in</span></button><button id="googleBtn">Continue with Google</button></div>
+  <p id="accountStatus" class="muted">Not signed in</p>
+ </div>
+</div>
+
+<div id="accountPanel" class="panel">
+ <div class="card small"><button class="close" data-close>Close</button><h2>Account</h2><p id="accountStatus" class="muted">Not signed in</p><div class="actions"><button id="openProfile">Profile</button><button id="logoutBtn">Log out</button></div></div>
+</div>
+
+<div id="profilePanel" class="panel">
+ <div class="card"><button class="close" data-close>Close</button><h2 id="profileName">Player</h2><p id="profileEmail" class="muted"></p>
+ <div class="grid"><div class="stat">Wins<b id="statWins">0</b></div><div class="stat">Losses<b id="statLosses">0</b></div><div class="stat">Matches<b id="statMatches">0</b></div><div class="stat">ELO<b id="statElo">1000</b></div><div class="stat">Kills<b id="statKills">0</b></div><div class="stat">Deaths<b id="statDeaths">0</b></div><div class="stat">Win rate<b id="statWinRate">0%</b></div><div class="stat">Skins<b id="skinStatus">Loading</b></div></div>
+ <h3>Username</h3><input id="usernameInput" maxlength="20"><button id="saveUsernameBtn">Save username</button></div>
+</div>
+
+<div id="leaderboardPanel" class="panel">
+ <div class="card"><button class="close" data-close>Close</button><h2>Live leaderboard</h2><p class="muted">Updates automatically when player records change.</p>
+  <div class="leader"><div class="leader-row muted"><span>#</span><span>Player</span><span>ELO</span><span>W</span><span>L</span><span>WR</span></div><div id="leaderboardBody"><div class="loading">Loading...</div></div></div>
+ </div>
+</div>
+<div id="toast" class="toast"></div>
+
 <script>
-var gameInstance = UnityLoader.instantiate("gameContainer", "https://onecloudcdn.site/build.json", {onProgress: UnityProgress, Module: {onRuntimeInitialized: function(){UnityProgress(gameInstance, "complete")}}});
-window.unityInstance = gameInstance;
-initializeFireBase();
-initRemoteConfig();
-function showAds(){}
-function requestNewAd(){unityAdFinishedCallback();}
-function unityAdFinishedCallback(){try{if(gameInstance)gameInstance.SendMessage("MainMenuManagers","OnWebCallback");}catch(e){}}
-function onUnityReady(){if(typeof sendConfig==="function")sendConfig();}
+let db=null;
+const state={user:null,profile:null,leaderboardUnsubscribe:null,profileUnsubscribe:null};
+const $=id=>document.getElementById(id);
+const configured=window.ONEVONE_FIREBASE_CONFIG && window.ONEVONE_FIREBASE_CONFIG.apiKey && !window.ONEVONE_FIREBASE_CONFIG.apiKey.startsWith("YOUR_");
+
+function toast(message,error=false){const e=$("toast");e.textContent=message;e.className="toast show"+(error?" error":"");clearTimeout(window.__toast);window.__toast=setTimeout(()=>e.className="toast",3000)}
+function panel(id){document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));$(id).classList.add("active")}
+function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
+function authError(e){return ({'auth/invalid-email':'Enter a valid email.','auth/email-already-in-use':'That email is already registered.','auth/weak-password':'Use a stronger password.','auth/wrong-password':'Incorrect email or password.','auth/user-not-found':'No account exists with that email.','auth/popup-closed-by-user':'Login window closed.','auth/too-many-requests':'Too many attempts. Try again later.'})[e.code]||e.message||'Authentication failed.'}
+
+async function ensureProfile(user){
+ const ref=db.collection("players").doc(user.uid), snap=await ref.get();
+ if(snap.exists)return snap.data();
+ let username=(user.displayName||(user.email||"player").split("@")[0]).replace(/[^a-zA-Z0-9_ -]/g,"").slice(0,20)||"player";
+ const profile={username,usernameLower:username.toLowerCase(),email:user.email||"",avatar:user.photoURL||"",wins:0,losses:0,matches:0,kills:0,deaths:0,elo:1000,winRate:0,equippedSkin:"default",allSkinsUnlocked:true,publicProfile:true,createdAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+ const clash=await db.collection("players").where("usernameLower","==",profile.usernameLower).limit(1).get();
+ if(!clash.empty){username=username+"_"+Math.floor(Math.random()*9999);profile.username=username;profile.usernameLower=username.toLowerCase()}
+ await ref.set(profile);return profile;
+}
+function render(){
+ const p=state.profile;if(!p)return;
+ $("profileName").textContent=p.username||"Player";$("profileEmail").textContent=state.user?.email||"";
+ $("statWins").textContent=p.wins||0;$("statLosses").textContent=p.losses||0;$("statMatches").textContent=p.matches||0;
+ $("statKills").textContent=p.kills||0;$("statDeaths").textContent=p.deaths||0;$("statElo").textContent=p.elo||1000;
+ $("statWinRate").textContent=Number(p.winRate||0).toFixed(1)+"%";$("skinStatus").textContent=p.allSkinsUnlocked?"Every skin unlocked":"Standard collection";
+ $("usernameInput").value=p.username||"";
+}
+async function login(){try{await firebase.auth().signInWithEmailAndPassword($("email").value.trim(),$("password").value);toast("Signed in.")}catch(e){toast(authError(e),true)}}
+async function signup(){
+ const email=$("email").value.trim(),password=$("password").value,username=$("username").value.trim();
+ if(!/^[a-zA-Z0-9_ -]{3,20}$/.test(username)){toast("Username must be 3–20 valid characters.",true);return}
+ try{const q=await db.collection("players").where("usernameLower","==",username.toLowerCase()).limit(1).get();if(!q.empty){toast("Username already taken.",true);return}
+ const c=await firebase.auth().createUserWithEmailAndPassword(email,password);await c.user.updateProfile({displayName:username});await ensureProfile(c.user);toast("Account created.")}
+ catch(e){toast(authError(e),true)}
+}
+async function google(){try{const r=await firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider());await ensureProfile(r.user);toast("Signed in with Google.")}catch(e){toast(authError(e),true)}}
+async function logout(){await firebase.auth().signOut();panel("homePanel");toast("Signed out.")}
+async function saveUsername(){
+ if(!state.user)return;const username=$("usernameInput").value.trim();if(!/^[a-zA-Z0-9_ -]{3,20}$/.test(username)){toast("Invalid username.",true);return}
+ try{const q=await db.collection("players").where("usernameLower","==",username.toLowerCase()).limit(1).get();if(!q.empty&&q.docs[0].id!==state.user.uid){toast("Username already taken.",true);return}
+ await db.collection("players").doc(state.user.uid).update({username,usernameLower:username.toLowerCase(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()});await state.user.updateProfile({displayName:username});toast("Username updated.")}
+ catch(e){toast(e.message,true)}
+}
+function leaderboard(){
+ if(state.leaderboardUnsubscribe)state.leaderboardUnsubscribe();
+ state.leaderboardUnsubscribe=db.collection("players").where("publicProfile","==",true).orderBy("elo","desc").limit(100).onSnapshot(s=>{
+  $("leaderboardBody").innerHTML=s.docs.map((d,i)=>{const p=d.data();return '<div class="leader-row'+(state.user&&d.id===state.user.uid?" current":"")+'"><span>'+ (i+1)+'</span><span class="player"><span class="avatar">'+(p.username||"?").charAt(0).toUpperCase()+'</span>'+escapeHtml(p.username||"Player")+'</span><span>'+ (p.elo||1000)+'</span><span>'+(p.wins||0)+'</span><span>'+(p.losses||0)+'</span><span>'+Number(p.winRate||0).toFixed(1)+'%</span></div>'}).join("")||'<div class="empty">No players yet.</div>'
+ },()=>{$("leaderboardBody").innerHTML='<div class="empty">Leaderboard unavailable.</div>'});
+}
+window.recordMatchResult=async result=>{
+ if(!state.user||!result||typeof result.won!=="boolean")return;
+ const ref=db.collection("players").doc(state.user.uid);
+ await db.runTransaction(async t=>{const s=await t.get(ref);if(!s.exists)throw Error("Profile missing");const p=s.data(),wins=Number(p.wins||0)+(result.won?1:0),losses=Number(p.losses||0)+(result.won?0:1),matches=wins+losses;
+ const elo=Math.max(0,Number(p.elo||1000)+(result.won?25:-20));t.update(ref,{wins,losses,matches,kills:Number(p.kills||0)+Number(result.kills||0),deaths:Number(p.deaths||0)+Number(result.deaths||0),elo,winRate:matches?wins/matches*100:0,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+ t.set(db.collection("matches").doc(),{playerId:state.user.uid,opponentId:result.opponentId||null,won:result.won,kills:Number(result.kills||0),deaths:Number(result.deaths||0),mode:result.mode||"1v1",createdAt:firebase.firestore.FieldValue.serverTimestamp()})});
+};
+window.setAllSkinsUnlocked=async()=>{if(!state.user)throw Error("Login required");await db.collection("players").doc(state.user.uid).update({allSkinsUnlocked:true})};
+
+document.addEventListener("DOMContentLoaded",()=>{
+ $("accountButton").onclick=()=>panel("accountPanel");$("profileButton").onclick=()=>state.user?panel("profilePanel"):panel("authPanel");$("leaderboardButton").onclick=()=>panel("leaderboardPanel");
+ $("openAuth").onclick=()=>panel("authPanel");$("openProfile").onclick=()=>state.user?panel("profilePanel"):panel("authPanel");
+ $("loginBtn")?.addEventListener("click",login);$("signupBtn")?.addEventListener("click",signup);$("googleBtn").onclick=google;$("logoutBtn").onclick=logout;$("saveUsernameBtn").onclick=saveUsername;
+ $("authSubmit").onclick=login;$("loginTab").onclick=()=>{ $("signupFields").hidden=true;$("loginTab").classList.add("active");$("signupTab").classList.remove("active");$("authTitle").textContent="Log in";$("authSubmitText").textContent="Log in";$("authSubmit").onclick=login};
+ $("signupTab").onclick=()=>{$("signupFields").hidden=false;$("signupTab").classList.add("active");$("loginTab").classList.remove("active");$("authTitle").textContent="Create account";$("authSubmitText").textContent="Create account";$("authSubmit").onclick=signup};
+ document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>panel("homePanel"));
+ if(!configured){$("setupWarning").hidden=false;leaderboard();return}
+ firebase.initializeApp(window.ONEVONE_FIREBASE_CONFIG);db=firebase.firestore();leaderboard();
+ firebase.auth().onAuthStateChanged(async user=>{state.user=user;if(user){state.profile=await ensureProfile(user);state.profileUnsubscribe&&state.profileUnsubscribe();state.profileUnsubscribe=db.collection("players").doc(user.uid).onSnapshot(s=>{state.profile=s.data();render();$("accountButton").textContent=state.profile?.username||"Account"});render();}else{$("accountButton").textContent="Login";state.profile=null}});
+});
 </script>
 </body>
 </html>
