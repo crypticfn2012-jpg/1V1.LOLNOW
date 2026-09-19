@@ -378,38 +378,202 @@ h3{font-size:13px}
   var $=function(id){return document.getElementById(id);};
   var configured=!!(window.ONEVONE_FIREBASE_READY || (window.ONEVONE_FIREBASE_CONFIG&&window.ONEVONE_FIREBASE_CONFIG.apiKey&&!String(window.ONEVONE_FIREBASE_CONFIG.apiKey).startsWith("YOUR_")));
 
-  // Compatibility bridge used by the original Unity/WebGL client.
+  // Legacy 1v1.LOL browser-auth compatibility bridge.
+  // The original client calls these global functions from its Unity WebGL build.
+  var tempErrorCreds=null;
+  var tempProviderName=null;
+
+  function callLegacyCallback(callback,value){
+    try{
+      if(typeof callback==="function"){
+        callback(value);
+        return true;
+      }
+      if(typeof callback==="string" && typeof window[callback]==="function"){
+        window[callback](value);
+        return true;
+      }
+    }catch(e){
+      console.error("[1V1.LOLNOW] Legacy auth callback failed:",e);
+    }
+    return false;
+  }
+
+  function callLegacyError(callback,message){
+    try{
+      if(typeof callback==="function"){
+        callback(message);
+        return true;
+      }
+      if(typeof callback==="string" && typeof window[callback]==="function"){
+        window[callback](message);
+        return true;
+      }
+    }catch(e){
+      console.error("[1V1.LOLNOW] Legacy auth error callback failed:",e);
+    }
+    return false;
+  }
+
+  window.getProvider=function(providerName){
+    if(providerName && String(providerName).indexOf("facebook")!==-1)
+      return new firebase.auth.FacebookAuthProvider();
+    return new firebase.auth.GoogleAuthProvider();
+  };
+
   window.initializeFireBase=function(){
-    if(!firebase.apps.length && configured)firebase.initializeApp(window.ONEVONE_FIREBASE_CONFIG);
+    try{
+      if(!firebase.apps.length && configured){
+        firebase.initializeApp(window.ONEVONE_FIREBASE_CONFIG);
+      }
+    }catch(e){
+      console.error("[1V1.LOLNOW] initializeFireBase failed:",e);
+    }
     return firebase.apps.length?firebase.app():null;
   };
+
   window.retrieveIdToken=function(successCallback,errorCallback){
-    var u=firebase.auth().currentUser;
-    if(!u){if(errorCallback)errorCallback("User is null");return;}
-    u.getIdToken().then(function(token){
-      if(successCallback)successCallback({token:token,displayName:u.displayName||""});
-    }).catch(function(error){if(errorCallback)errorCallback(error.message);});
+    var auth=firebase.auth();
+    var u=auth.currentUser;
+
+    if(!u){
+      callLegacyError(errorCallback,"User is null");
+      return;
+    }
+
+    u.getIdToken(true).then(function(idToken){
+      var resultObj={
+        token:idToken,
+        displayName:u.displayName||"",
+        uid:u.uid||"",
+        email:u.email||""
+      };
+
+      // Keep the credential available to both browser-side game code and
+      // any compatible Unity/WebGL auth adapter.
+      window.ONEVONE_AUTH_TOKEN=idToken;
+      window.ONEVONE_GAME_AUTH=resultObj;
+
+      try{
+        localStorage.setItem("onevone.authToken",idToken);
+        localStorage.setItem("onevone.firebaseUid",u.uid||"");
+        localStorage.setItem("onevone.displayName",u.displayName||"");
+        localStorage.setItem("onevone.email",u.email||"");
+      }catch(e){}
+
+      window.dispatchEvent(new CustomEvent("onevone:auth-ready",{
+        detail:resultObj
+      }));
+
+      callLegacyCallback(successCallback,resultObj);
+      sendUnityAuthToken(idToken);
+    }).catch(function(error){
+      console.error("[1V1.LOLNOW] retrieveIdToken failed:",error);
+      callLegacyError(errorCallback,error&&error.message?error.message:"Could not get Firebase ID token.");
+    });
   };
-  window.anonymousLogin=function(successCallback){
-    if(successCallback)successCallback({token:"",displayName:"guest"});
+
+  window.anonymousLogin=function(successCallback,errorCallback){
+    var resultObj={token:"",displayName:"guest",uid:"",email:""};
+    callLegacyCallback(successCallback,resultObj);
   };
+
   window.firebaseLogin=function(providerName,successCallback,errorCallback){
-    var u=firebase.auth().currentUser;
-    if(u&&!u.isAnonymous){window.retrieveIdToken(successCallback,errorCallback);return;}
-    if(providerName==="anonymous"){window.anonymousLogin(successCallback,errorCallback);return;}
-    var provider=(providerName&&String(providerName).indexOf("facebook")!==-1)
-      ?new firebase.auth.FacebookAuthProvider()
-      :new firebase.auth.GoogleAuthProvider();
-    firebase.auth().signInWithPopup(provider)
-      .then(function(){window.retrieveIdToken(successCallback,errorCallback);})
-      .catch(function(error){if(errorCallback)errorCallback(error.message);});
+    try{
+      var auth=firebase.auth();
+      var u=auth.currentUser;
+
+      // This is the important case for 1V1.LOLNOW:
+      // the wrapper already authenticated the player, so the game's own
+      // login call should receive that same authenticated Firebase session.
+      if(u&&!u.isAnonymous){
+        window.retrieveIdToken(successCallback,errorCallback);
+        return;
+      }
+
+      if(providerName==="anonymous"){
+        window.anonymousLogin(successCallback,errorCallback);
+        return;
+      }
+
+      var provider=window.getProvider(providerName);
+      auth.useDeviceLanguage();
+
+      auth.signInWithPopup(provider).then(function(result){
+        if(result&&result.user){
+          window.retrieveIdToken(successCallback,errorCallback);
+        }else{
+          callLegacyError(errorCallback,"Firebase did not return a user.");
+        }
+      }).catch(function(error){
+        tempErrorCreds=error&&error.credential||null;
+        tempProviderName=providerName||"google.com";
+        console.error("[1V1.LOLNOW] firebaseLogin failed:",error);
+        callLegacyError(errorCallback,error&&error.message?error.message:"Login failed.");
+      });
+    }catch(e){
+      callLegacyError(errorCallback,e&&e.message?e.message:"Login failed.");
+    }
   };
-  window.firebaseLogout=function(){return firebase.auth().signOut();};
+
+  window.firebaseLogout=function(){
+    try{
+      return firebase.auth().signOut();
+    }catch(e){
+      console.error("[1V1.LOLNOW] firebaseLogout failed:",e);
+      return Promise.reject(e);
+    }
+  };
+
   window.getCurrentUserDisplayName=function(){
     var u=firebase.auth().currentUser;
     return u&&u.displayName?u.displayName:"";
   };
-  window.initRemoteConfig=function(){return Promise.resolve();};
+
+  window.initRemoteConfig=function(){
+    return Promise.resolve();
+  };
+
+  // Extra compatibility helpers used by older builds.
+  window.setModalContent=function(modalContentId,contentString){
+    var content=document.getElementById(modalContentId);
+    if(content)content.innerHTML=contentString;
+  };
+
+  window.showModal=function(modalId){
+    var modal=document.getElementById(modalId);
+    if(modal)modal.style.display="block";
+  };
+
+  window.hideModal=function(modalId){
+    var modal=document.getElementById(modalId);
+    if(modal)modal.style.display="none";
+  };
+
+  window.continueLogin=function(){
+    if(!tempProviderName)return;
+    window.firebaseLogin(tempProviderName);
+  };
+
+  // Public adapter for the game build: it can use the current authenticated
+  // Firebase session without knowing anything about the site's profile UI.
+  window.ONEVONE_GAME_AUTH_ADAPTER={
+    getCurrentUser:function(){return firebase.auth().currentUser;},
+    getIdToken:function(forceRefresh){
+      var u=firebase.auth().currentUser;
+      return u?u.getIdToken(!!forceRefresh):Promise.reject(new Error("User is null"));
+    },
+    getAuthState:function(){
+      var u=firebase.auth().currentUser;
+      return u?{
+        uid:u.uid,
+        email:u.email||"",
+        displayName:u.displayName||"",
+        isAnonymous:!!u.isAnonymous
+      }:null;
+    }
+  };
+
 
   function toast(message,error){
     var e=$("toast");
@@ -978,11 +1142,25 @@ h3{font-size:13px}
 
       if(!user){
         authResolved=true;
+        window.ONEVONE_AUTH_TOKEN=null;
+        window.ONEVONE_GAME_AUTH=null;
+        try{
+          localStorage.removeItem("onevone.authToken");
+          localStorage.removeItem("onevone.firebaseUid");
+          localStorage.removeItem("onevone.displayName");
+          localStorage.removeItem("onevone.email");
+        }catch(e){}
         hide("loadingOverlay");
         hide("gameHud");
         show("welcomeOverlay");
         return;
       }
+
+      // Refresh the same token the Unity client will receive through the
+      // legacy 1v1.LOL browser auth callbacks.
+      window.retrieveIdToken(function(){},function(error){
+        console.warn("[1V1.LOLNOW] Unity auth sync failed:",error);
+      });
 
       if(!authResolved||!gameStarted){
         authResolved=true;
