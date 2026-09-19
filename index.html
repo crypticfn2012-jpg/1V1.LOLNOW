@@ -380,7 +380,12 @@ h3{font-size:13px}
   var configured=!!(window.ONEVONE_FIREBASE_READY || (window.ONEVONE_FIREBASE_CONFIG&&window.ONEVONE_FIREBASE_CONFIG.apiKey&&!String(window.ONEVONE_FIREBASE_CONFIG.apiKey).startsWith("YOUR_")));
   try{
     window.ONEVONE_AUTH_TOKEN=window.ONEVONE_AUTH_TOKEN||localStorage.getItem("onevone.authToken")||"";
-  }catch(e){window.ONEVONE_AUTH_TOKEN="";}
+    var savedGameSession=localStorage.getItem("onevone.gameSession");
+    window.ONEVONE_GAME_SESSION=savedGameSession?JSON.parse(savedGameSession):null;
+  }catch(e){
+    window.ONEVONE_AUTH_TOKEN="";
+    window.ONEVONE_GAME_SESSION=null;
+  }
 
   (function installLegacyStorageBridge(){
     try{
@@ -390,14 +395,20 @@ h3{font-size:13px}
         var originalGet=ls.getItem.bind(ls);
         ls.getItem=function(key){
           var k=String(key||"").toLowerCase();
-          if(window.ONEVONE_AUTH_TOKEN&&k.indexOf("1v1")!==-1&&
-             (k.indexOf("token")!==-1||k.indexOf("auth")!==-1||k.indexOf("session")!==-1)){
-            return window.ONEVONE_AUTH_TOKEN;
+          var gameSession=window.ONEVONE_GAME_SESSION||{};
+          if(k==="1v1_session_token"||k==="1v1_sess"+"ion_token"){
+            return gameSession.token||originalGet(key);
+          }
+          if(k==="1v1_google_id"||k==="1v1_goog"+"le_id"){
+            return gameSession.googleId||originalGet(key);
           }
           var p=window.ONEVONE_GAME_PROFILE||{};
-          if(p.username&&k.indexOf("1v1")!==-1&&
-             (k.indexOf("nick")!==-1||k.indexOf("name")!==-1||k.indexOf("display")!==-1)){
-            return p.username;
+          if(k==="1v1_nickname"||k==="1v1_nick"+"name"||k==="1v1_nick"){
+            return p.username||originalGet(key);
+          }
+          if(window.ONEVONE_AUTH_TOKEN&&k.indexOf("onevone")!==-1&&
+             (k.indexOf("token")!==-1||k.indexOf("auth")!==-1||k.indexOf("session")!==-1)){
+            return window.ONEVONE_AUTH_TOKEN;
           }
           return originalGet(key);
         };
@@ -407,14 +418,20 @@ h3{font-size:13px}
         var originalSessionGet=ss.getItem.bind(ss);
         ss.getItem=function(key){
           var k=String(key||"").toLowerCase();
-          if(window.ONEVONE_AUTH_TOKEN&&k.indexOf("1v1")!==-1&&
-             (k.indexOf("token")!==-1||k.indexOf("auth")!==-1||k.indexOf("session")!==-1)){
-            return window.ONEVONE_AUTH_TOKEN;
+          var gameSession=window.ONEVONE_GAME_SESSION||{};
+          if(k==="1v1_session_token"||k==="1v1_sess"+"ion_token"){
+            return gameSession.token||originalSessionGet(key);
+          }
+          if(k==="1v1_google_id"||k==="1v1_goog"+"le_id"){
+            return gameSession.googleId||originalSessionGet(key);
           }
           var p=window.ONEVONE_GAME_PROFILE||{};
-          if(p.username&&k.indexOf("1v1")!==-1&&
-             (k.indexOf("nick")!==-1||k.indexOf("name")!==-1||k.indexOf("display")!==-1)){
-            return p.username;
+          if(k==="1v1_nickname"||k==="1v1_nick"+"name"||k==="1v1_nick"){
+            return p.username||originalSessionGet(key);
+          }
+          if(window.ONEVONE_AUTH_TOKEN&&k.indexOf("onevone")!==-1&&
+             (k.indexOf("token")!==-1||k.indexOf("auth")!==-1||k.indexOf("session")!==-1)){
+            return window.ONEVONE_AUTH_TOKEN;
           }
           return originalSessionGet(key);
         };
@@ -479,6 +496,86 @@ h3{font-size:13px}
     return firebase.apps.length?firebase.app():null;
   };
 
+  async function ensureGameSession(user){
+    if(!user||user.isAnonymous)return null;
+
+    var existing=window.ONEVONE_GAME_SESSION||{};
+    if(existing.token&&existing.googleId)return existing;
+
+    var googleId="";
+    try{
+      var providers=user.providerData||[];
+      for(var i=0;i<providers.length;i++){
+        if(providers[i]&&providers[i].providerId==="google.com"&&providers[i].uid){
+          googleId=providers[i].uid;
+          break;
+        }
+      }
+    }catch(e){}
+
+    if(!googleId)googleId="firebase:"+String(user.uid);
+
+    var username=(window.ONEVONE_GAME_PROFILE&&window.ONEVONE_GAME_PROFILE.username)
+      ||user.displayName
+      ||((user.email||"player").split("@")[0])
+      ||"Player";
+
+    var payload={
+      google_id:googleId,
+      email:user.email||"",
+      display_name:username
+    };
+
+    var response=await fetch("/api/auth/google",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload)
+    });
+
+    if(!response.ok)throw new Error("Game authentication failed ("+response.status+").");
+
+    var data=await response.json();
+    if(!data||!data.token||!data.player){
+      throw new Error("Game authentication returned an invalid session.");
+    }
+
+    window.ONEVONE_GAME_SESSION={
+      token:data.token,
+      googleId:googleId,
+      player:data.player,
+      uid:user.uid,
+      username:data.player.display_name||username
+    };
+
+    try{
+      localStorage.setItem("1v1_session_token",data.token);
+      localStorage.setItem("1v1_google_id",googleId);
+      localStorage.setItem("1v1_nickname",data.player.display_name||username);
+      localStorage.setItem("onevone.gameSession",JSON.stringify(window.ONEVONE_GAME_SESSION));
+    }catch(e){}
+
+    try{
+      if(typeof window._reloadPlayerData==="function"){
+        await window._reloadPlayerData();
+      }
+    }catch(e){}
+
+    window.dispatchEvent(new CustomEvent("onevone:game-auth-ready",{
+      detail:{
+        uid:user.uid,
+        googleId:googleId,
+        player:data.player
+      }
+    }));
+
+    console.log("[1V1.LOLNOW] Game session established for "+(data.player.display_name||username));
+    return window.ONEVONE_GAME_SESSION;
+  }
+
+  window.getOneVOneGameSession=function(){
+    return window.ONEVONE_GAME_SESSION||null;
+  };
+
   window.retrieveIdToken=function(successCallback,errorCallback){
     var auth=firebase.auth();
     var u=auth.currentUser;
@@ -504,15 +601,7 @@ h3{font-size:13px}
       // Persist the credential under the names used by older 1v1.LOL/
       // Reloaded-compatible server bridges as well as our own names.
       try{
-        var authKeys=[
-          "onevone.authToken",
-          "1v1_game_auth_token",
-          "1v1_game_token",
-          "1v1_auth_token",
-          "1v1_token",
-          "authToken"
-        ];
-        authKeys.forEach(function(key){localStorage.setItem(key,idToken);});
+        localStorage.setItem("onevone.authToken",idToken);
         var uidKeys=["onevone.firebaseUid","1v1_uid","1v1_user_id","1v1_google_id"];
         uidKeys.forEach(function(key){localStorage.setItem(key,u.uid||"");});
         var nameKeys=["onevone.displayName","1v1_nickname","1v1_nick","1v1_display_name"];
@@ -894,15 +983,19 @@ h3{font-size:13px}
     if(!gameInstance||typeof gameInstance.SendMessage!=="function"||!token)return;
     var u=firebase.auth().currentUser;
     var profile=window.ONEVONE_GAME_PROFILE||{};
+    var gameSession=window.ONEVONE_GAME_SESSION||{};
+    var gameToken=gameSession.token||"";
     var userPayload=JSON.stringify({
       uid:u&&u.uid||null,
       username:profile.username||u&&u.displayName||"",
       email:u&&u.email||"",
-      token:token
+      token:token,
+      gameToken:gameToken
     });
 
     [
-      ["MainMenuManagers","SetAuthToken",token],
+      ["MainMenuManagers","SetAuthToken",gameToken||token],
+      ["MainMenuManagers","SetGameSessionToken",gameToken],
       ["MainMenuManagers","SetFirebaseToken",token],
       ["MainMenuManagers","SetIdToken",token],
       ["MainMenuManagers","Login",token],
@@ -1218,6 +1311,14 @@ h3{font-size:13px}
     try{
       if(state.profileUnsubscribe)state.profileUnsubscribe();
       if(state.leaderboardUnsubscribe)state.leaderboardUnsubscribe();
+      try{await fetch("/api/auth/logout",{method:"POST"});}catch(e){}
+      window.ONEVONE_GAME_SESSION=null;
+      try{
+        localStorage.removeItem("1v1_session_token");
+        localStorage.removeItem("1v1_google_id");
+        localStorage.removeItem("1v1_nickname");
+        localStorage.removeItem("onevone.gameSession");
+      }catch(e){}
       await firebase.auth().signOut();
       state.user=null;state.profile=null;gameInstance=null;gameStarted=false;
       hide("gameHud");hide("profilePanel");hide("leaderboardPanel");hide("accountPanel");
@@ -1293,6 +1394,11 @@ h3{font-size:13px}
       window.retrieveIdToken(function(){},function(error){
         console.warn("[1V1.LOLNOW] Unity auth sync failed:",error);
       });
+      try{
+        await ensureGameSession(user);
+      }catch(gameAuthError){
+        console.warn("[1V1.LOLNOW] Game session sync failed:",gameAuthError);
+      }
 
       if(!authResolved||!gameStarted){
         authResolved=true;
