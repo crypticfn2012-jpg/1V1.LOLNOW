@@ -12,6 +12,31 @@
 <script src="https://www.gstatic.com/firebasejs/7.24.0/firebase-firestore.js"></script>
 <script src="firebase-config.js"></script>
 
+<script>
+  /*
+   * IMPORTANT:
+   * The legacy game CDN includes server-mock.js. It replaces the global
+   * Firestore implementation with an offline emulator for the Unity client.
+   * Capture a real Firestore instance BEFORE that script loads so accounts,
+   * profiles and the leaderboard continue using the real Firebase database.
+   */
+  window.ONEVONE_REAL_FIRESTORE = null;
+  window.ONEVONE_FIREBASE_READY = false;
+  try {
+    if (
+      window.ONEVONE_FIREBASE_CONFIG &&
+      window.ONEVONE_FIREBASE_CONFIG.apiKey &&
+      !String(window.ONEVONE_FIREBASE_CONFIG.apiKey).startsWith("YOUR_")
+    ) {
+      firebase.initializeApp(window.ONEVONE_FIREBASE_CONFIG);
+      window.ONEVONE_REAL_FIRESTORE = firebase.firestore();
+      window.ONEVONE_FIREBASE_READY = true;
+    }
+  } catch (e) {
+    console.error("[1V1.LOLNOW] Firebase bootstrap failed:", e);
+  }
+</script>
+
 <!-- The original Unity build depends on these browser-side helpers. -->
 <script src="https://onecloudcdn.site/server-mock.js"></script>
 <script src="https://onecloudcdn.site/UnityLoader.js"></script>
@@ -350,7 +375,7 @@ h3{font-size:13px}
   var mode="login";
   var state={user:null,profile:null,leaderboardUnsubscribe:null,profileUnsubscribe:null};
   var $=function(id){return document.getElementById(id);};
-  var configured=!!(window.ONEVONE_FIREBASE_CONFIG&&window.ONEVONE_FIREBASE_CONFIG.apiKey&&!String(window.ONEVONE_FIREBASE_CONFIG.apiKey).startsWith("YOUR_"));
+  var configured=!!(window.ONEVONE_FIREBASE_READY || (window.ONEVONE_FIREBASE_CONFIG&&window.ONEVONE_FIREBASE_CONFIG.apiKey&&!String(window.ONEVONE_FIREBASE_CONFIG.apiKey).startsWith("YOUR_")));
 
   // Compatibility bridge used by the original Unity/WebGL client.
   window.initializeFireBase=function(){
@@ -832,8 +857,8 @@ h3{font-size:13px}
     }
 
     try{
-      firebase.initializeApp(window.ONEVONE_FIREBASE_CONFIG);
-      db=firebase.firestore();
+      db=window.ONEVONE_REAL_FIRESTORE;
+      if(!db)throw new Error("Real Firestore was not captured before the game mock loaded.");
       leaderboard();
     }catch(e){
       console.error(e);
