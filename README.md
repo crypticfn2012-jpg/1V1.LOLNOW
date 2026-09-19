@@ -34,3 +34,9 @@ This MVP is client-authoritative. Browser users can forge results. For a serious
 Player profiles contain allSkinsUnlocked: true. That flag is ready for a Unity-side entitlement check. It cannot by itself modify an already-built external Unity WebGL binary.
 
 The current game binary is loaded from onecloudcdn.site/build.json.
+
+## Game bridge
+
+The wrapper passes the signed-in Firebase ID token, account profile, full-skin entitlement and all-mode entitlement to the Unity WebGL client when it is ready. It also stores browser-side entitlement flags for compatible client code.
+
+The compiled Unity build still decides which internal Unity methods, skins and modes actually respond. The wrapper cannot add new Unity methods to an already-built binary. If a feature remains locked inside the game after the bridge fires, the Unity build or its server emulator must expose a compatible hook for that feature.
