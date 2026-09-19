@@ -30,9 +30,9 @@
 <div id="authPanel" class="panel">
  <div class="card small"><button class="close" data-close>Close</button><h2 id="authTitle">Log in</h2>
   <div class="tabs"><button id="loginTab" class="tab active">Log in</button><button id="signupTab" class="tab">Create account</button></div>
-  <input id="email" type="email" placeholder="Email">
-  <input id="password" type="password" placeholder="Password">
-  <div id="signupFields" hidden><input id="username" maxlength="20" placeholder="Username"></div>
+  <form id="authForm" autocomplete="on" onsubmit="return false"><input id="email" name="email" type="email" autocomplete="email" placeholder="Email">
+  <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Password">
+  <div id="signupFields" hidden><input id="username" name="username" maxlength="20" autocomplete="username" placeholder="Username"></div></form>
   <div class="actions"><button id="authSubmit"><span id="authSubmitText">Log in</span></button><button id="googleBtn">Continue with Google</button></div>
   <p id="accountStatus" class="muted">Not signed in</p>
  </div>
