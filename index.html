@@ -380,7 +380,7 @@ h3{font-size:13px}
   var $=function(id){return document.getElementById(id);};
   function getRealAuth(){
     if(window.ONEVONE_REAL_AUTH)return window.ONEVONE_REAL_AUTH;
-    return getRealAuth();
+    return firebase.auth();
   }
   var configured=!!(window.ONEVONE_FIREBASE_READY || (window.ONEVONE_FIREBASE_CONFIG&&window.ONEVONE_FIREBASE_CONFIG.apiKey&&!String(window.ONEVONE_FIREBASE_CONFIG.apiKey).startsWith("YOUR_")));
   try{
