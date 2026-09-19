@@ -30,6 +30,7 @@
     ) {
       firebase.initializeApp(window.ONEVONE_FIREBASE_CONFIG);
       window.ONEVONE_REAL_FIRESTORE = firebase.firestore();
+      window.ONEVONE_FIRESTORE_FIELD_VALUE = firebase.firestore.FieldValue;
       window.ONEVONE_FIREBASE_READY = true;
     }
   } catch (e) {
@@ -377,6 +378,49 @@ h3{font-size:13px}
   var state={user:null,profile:null,leaderboardUnsubscribe:null,profileUnsubscribe:null};
   var $=function(id){return document.getElementById(id);};
   var configured=!!(window.ONEVONE_FIREBASE_READY || (window.ONEVONE_FIREBASE_CONFIG&&window.ONEVONE_FIREBASE_CONFIG.apiKey&&!String(window.ONEVONE_FIREBASE_CONFIG.apiKey).startsWith("YOUR_")));
+
+  (function installLegacyStorageBridge(){
+    try{
+      var ls=window.localStorage;
+      var ss=window.sessionStorage;
+      if(ls&&!ls.__onevonePatched){
+        var originalGet=ls.getItem.bind(ls);
+        ls.getItem=function(key){
+          var k=String(key||"").toLowerCase();
+          if(window.ONEVONE_AUTH_TOKEN&&k.indexOf("1v1")!==-1&&
+             (k.indexOf("token")!==-1||k.indexOf("auth")!==-1||k.indexOf("session")!==-1)){
+            return window.ONEVONE_AUTH_TOKEN;
+          }
+          var p=window.ONEVONE_GAME_PROFILE||{};
+          if(p.username&&k.indexOf("1v1")!==-1&&
+             (k.indexOf("nick")!==-1||k.indexOf("name")!==-1||k.indexOf("display")!==-1)){
+            return p.username;
+          }
+          return originalGet(key);
+        };
+        ls.__onevonePatched=true;
+      }
+      if(ss&&!ss.__onevonePatched){
+        var originalSessionGet=ss.getItem.bind(ss);
+        ss.getItem=function(key){
+          var k=String(key||"").toLowerCase();
+          if(window.ONEVONE_AUTH_TOKEN&&k.indexOf("1v1")!==-1&&
+             (k.indexOf("token")!==-1||k.indexOf("auth")!==-1||k.indexOf("session")!==-1)){
+            return window.ONEVONE_AUTH_TOKEN;
+          }
+          var p=window.ONEVONE_GAME_PROFILE||{};
+          if(p.username&&k.indexOf("1v1")!==-1&&
+             (k.indexOf("nick")!==-1||k.indexOf("name")!==-1||k.indexOf("display")!==-1)){
+            return p.username;
+          }
+          return originalSessionGet(key);
+        };
+        ss.__onevonePatched=true;
+      }
+    }catch(e){
+      console.warn("[1V1.LOLNOW] Legacy storage bridge unavailable:",e);
+    }
+  })();
 
   // Legacy 1v1.LOL browser-auth compatibility bridge.
   // The original client calls these global functions from its Unity WebGL build.
@@ -729,7 +773,8 @@ h3{font-size:13px}
     window.ONEVONE_ALL_MODES_UNLOCKED=modesUnlocked;
     window.ONEVONE_ENABLED_MODES=[
       "1v1","1v1 Clash","Battle Royale","Zone Wars","Box Fight","Box Fight 2v2",
-      "Deathmatch","Zombies","Build Race","Practice","Aim Trainer","Bots","Custom"
+      "Deathmatch","Zombies","Build Race","Practice","Aim Trainer","Bots","Custom",
+      "Free Build","Team Deathmatch","Headshots Only","Snipers","Gun Game"
     ];
 
     var payload=JSON.stringify(entitlement);
@@ -913,7 +958,70 @@ h3{font-size:13px}
       window.requestNewAd=function(){window.unityAdFinishedCallback();};
       window.showAds=function(){};
       window.onUnityReady=function(){
-        sendEntitlementsToUnity();
+        console.log("[1V1.LOLNOW] Unity ready — syncing account, config and modes.");
+
+        try{
+          var u=firebase.auth().currentUser;
+          if(u){
+            u.getIdToken(true).then(function(token){
+              window.ONEVONE_AUTH_TOKEN=token;
+              sendUnityAuthToken(token);
+              sendEntitlementsToUnity();
+            }).catch(function(e){
+              console.warn("[1V1.LOLNOW] Unity auth token sync failed:",e);
+            });
+          }
+        }catch(e){}
+
+        try{
+          var cfg=(typeof window.conf!=="undefined"&&window.conf)?window.conf:null;
+          if(cfg&&gameInstance&&typeof gameInstance.SendMessage==="function"){
+            var configJson=JSON.stringify(cfg);
+            [
+              ["MainMenuManagers","ActivateRemoteConfig"],
+              ["PersistantObjects","ActivateRemoteConfig"],
+              ["PersistantObjects","OnRemoteConfigLoaded"],
+              ["PersistantObjects","SetRemoteConfig"],
+              ["AppManager","ActivateRemoteConfig"],
+              ["AppManager","OnRemoteConfigLoaded"],
+              ["GameManager","ActivateRemoteConfig"],
+              ["GameManager","OnRemoteConfigLoaded"],
+              ["ConfigManager","ActivateRemoteConfig"],
+              ["RemoteConfigManager","ActivateRemoteConfig"],
+              ["RemoteConfigManager","OnRemoteConfigLoaded"],
+              ["FirebaseManager","OnRemoteConfigLoaded"],
+              ["SettingsManager","ActivateRemoteConfig"]
+            ].forEach(function(t){
+              try{gameInstance.SendMessage(t[0],t[1],configJson);}catch(e){}
+            });
+          }
+        }catch(e){}
+
+        setTimeout(function(){
+          if(!gameInstance||typeof gameInstance.SendMessage!=="function")return;
+          var modes=window.ONEVONE_ENABLED_MODES||[];
+          var targets=[
+            ["PersistantObjects","OnGameModeChanged"],
+            ["Connector","OnGameModeChanged"],
+            ["PartyRoomConnector","OnGameModeChanged"],
+            ["GameModesHandler","OnGameModeChanged"],
+            ["MainMenuManagers","OnGameModeChanged"],
+            ["AppManager","OnGameModeChanged"],
+            ["PersistantObjects","SetMode"],
+            ["MainMenuManagers","SetMode"]
+          ];
+          targets.forEach(function(t){
+            try{gameInstance.SendMessage(t[0],t[1],"1v1");}catch(e){}
+          });
+          try{
+            localStorage.setItem("onevone.enabledModes",JSON.stringify(modes));
+            localStorage.setItem("onevone.allModesUnlocked","true");
+            sessionStorage.setItem("onevone.enabledModes",JSON.stringify(modes));
+          }catch(e){}
+          window.dispatchEvent(new CustomEvent("onevone:modes-ready",{
+            detail:{allModesUnlocked:true,enabledModes:modes}
+          }));
+        },3000);
       };
     }catch(e){
       console.error(e);
