@@ -841,7 +841,7 @@ h3{font-size:13px}
     installLegacyHttpBridge();
     installGameRuntimeCompatibility();
     await loadExternalScript("https://onecloudcdn.site/UnityProgress.js");
-    await loadExternalScript("https://justbuild.nyc3.cdn.digitaloceanspaces.com/CI/1v1/Prod/162/UnityLoader.js");
+    await loadExternalScript("https://justbuild.nyc3.cdn.digitaloceanspaces.com/1v1-1.2/Build/UnityLoader.js");
     installGameRuntimeCompatibility();
 
     window.ONEVONE_GAME_RUNTIME_READY=true;
@@ -1624,7 +1624,7 @@ h3{font-size:13px}
 
       gameInstance=window.UnityLoader.instantiate(
         "gameContainer",
-        "https://justbuild.nyc3.cdn.digitaloceanspaces.com/CI/1v1/Prod/162/WebGL.json",
+        "https://justbuild.nyc3.cdn.digitaloceanspaces.com/1v1-1.2/Build/WebGL.json",
         {
           onProgress:function(instance,progress){
             var percent=Math.round((Number(progress)||0)*100);
