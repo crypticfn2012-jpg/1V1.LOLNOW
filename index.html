@@ -967,6 +967,72 @@ h3{font-size:13px}
     }
   }
 
+  // Keep the wrapper's Firebase account and the legacy game's mock account in sync.
+  // This helper intentionally tolerates different versions of server-mock.js.
+  function applyMockUser(mockAuth, session, firebaseUser){
+    session = session || window.ONEVONE_GAME_SESSION || null;
+    if(!session) return null;
+
+    var player = session.player || {};
+    var username = session.username || player.display_name ||
+      (firebaseUser && firebaseUser.displayName) || "Player";
+    var mockUser = {
+      uid: (firebaseUser && firebaseUser.uid) || session.uid || player.firebase_uid || "",
+      id: (firebaseUser && firebaseUser.uid) || session.uid || player.firebase_uid || "",
+      displayName: username,
+      nickname: username,
+      email: (firebaseUser && firebaseUser.email) || player.email || "",
+      photoURL: (firebaseUser && firebaseUser.photoURL) || null,
+      isAnonymous: false,
+      emailVerified: !!(firebaseUser && firebaseUser.emailVerified),
+      providerData: firebaseUser && Array.isArray(firebaseUser.providerData)
+        ? firebaseUser.providerData : [],
+      getIdToken: function(){ return Promise.resolve(session.token || ""); },
+      getIdTokenResult: function(){
+        return Promise.resolve({token:session.token || "", claims:{uid:this.uid}});
+      },
+      toJSON: function(){
+        return {uid:this.uid,displayName:this.displayName,email:this.email,
+          photoURL:this.photoURL,emailVerified:this.emailVerified};
+      }
+    };
+
+    window.ONEVONE_GAME_SESSION = session;
+    window.ONEVONE_GAME_LEGACY_USER = buildLegacyGameUser();
+    window.ONEVONE_GAME_MOCK_USER = mockUser;
+
+    try{
+      if(mockAuth){
+        // Custom mock auth objects often expose writable currentUser fields.
+        try{ mockAuth.currentUser = mockUser; }catch(e){}
+        try{ if("_currentUser" in mockAuth) mockAuth._currentUser = mockUser; }catch(e){}
+        try{ mockAuth.user = mockUser; }catch(e){}
+        try{
+          if(typeof mockAuth.setCurrentUser === "function"){
+            mockAuth.setCurrentUser(mockUser);
+          }
+        }catch(e){}
+      }
+    }catch(e){}
+
+    // The original game's auth bridge reads these keys directly.
+    try{
+      localStorage.setItem("1v1_session_token", session.token || "");
+      localStorage.setItem("1v1_google_id", session.googleId || session.google_id || "");
+      localStorage.setItem("1v1_nickname", username);
+    }catch(e){}
+    try{
+      sessionStorage.setItem("1v1_session_token", session.token || "");
+      sessionStorage.setItem("1v1_google_id", session.googleId || session.google_id || "");
+      sessionStorage.setItem("1v1_nickname", username);
+    }catch(e){}
+
+    window.dispatchEvent(new CustomEvent("onevone:mock-user-ready", {
+      detail:{user:mockUser, session:session}
+    }));
+    return mockUser;
+  }
+
   function persistGameSession(session){
     window.ONEVONE_GAME_SESSION=session||null;
     if(!session)return;
