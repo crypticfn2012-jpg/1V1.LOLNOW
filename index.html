@@ -278,6 +278,7 @@ h3{font-size:13px}
             </div>
           </div>
           <div class="actions-stack">
+            <button class="btn primary" id="playNowBtn" type="button">Play Now</button>
             <button class="btn primary" id="authSubmit" type="submit"><span id="authSubmitText">Log in</span></button>
             <button class="btn" id="googleBtn" type="button">Continue with Google</button>
           </div>
@@ -1604,123 +1605,26 @@ h3{font-size:13px}
 
   async function startGame(){
     if(gameStarted)return;
-
     gameStarted=true;
-    setLoading("Loading 1v1.LOLNOW","Preparing the game runtime…",8);
-    applyGameEntitlements();
+    hide("welcomeOverlay");
+    hide("gameError");
+    hide("loadingOverlay");
+    hide("setupWarning");
+    hide("gameHud");
 
-    try{
-      await loadGameRuntime();
-
-      if(state.user){
-        await ensureGameSession(state.user);
-      }
-
-      if(!window.UnityLoader || typeof window.UnityLoader.instantiate!=="function"){
-        throw new Error("The Unity loader did not load. The game CDN may be blocked or unavailable.");
-      }
-
-      setLoading("Loading 1v1.LOLNOW","Starting the Unity client…",18);
-
-      gameInstance=window.UnityLoader.instantiate(
-        "gameContainer",
-        "https://justbuild.nyc3.cdn.digitaloceanspaces.com/1v1-1.2/Build/WebGL.json",
-        {
-          onProgress:function(instance,progress){
-            var percent=Math.round((Number(progress)||0)*100);
-            setGameProgress(
-              Math.min(98,Math.max(10,percent)),
-              "Loading game assets… "+percent+"%"
-            );
-          },
-          Module:{
-            onRuntimeInitialized:function(){
-              setLoading("Loading 1v1.LOLNOW","Applying your account and game config…",100);
-              installGameRuntimeCompatibility();
-              sendEntitlementsToUnity();
-
-              Promise.resolve(window.sendConfig?window.sendConfig():false)
-                .catch(function(e){
-                  console.warn("[1V1.LOLNOW] Remote Config handoff failed:",e);
-                })
-                .then(function(){
-                  setTimeout(function(){
-                    hide("loadingOverlay");
-                    show("gameHud");
-                    if(state.user)window.retrieveIdToken(function(){},function(){});
-                  },700);
-                });
-            }
-          }
-        }
-      );
-
-      window.unityInstance=gameInstance;
-
-      window.unityAdFinishedCallback=function(){
-        if(!gameInstance)return;
-        [
-          ["WebAdsManager","OnWebCallback"],
-          ["MainMenuManagers","OnWebCallback"],
-          ["PersistantObjects","OnWebCallback"],
-          ["WebCallbacks","RvWatchComplete","true"],
-          ["PersistantObjects","RvWatchComplete","true"]
-        ].forEach(function(t){
-          try{
-            if(t.length===3)gameInstance.SendMessage(t[0],t[1],t[2]);
-            else gameInstance.SendMessage(t[0],t[1]);
-          }catch(e){}
-        });
-      };
-
-      window.requestNewAd=function(){window.unityAdFinishedCallback();};
-      window.showAds=function(){};
-
-      window.onUnityReady=function(){
-        console.log("[1V1.LOLNOW] Unity ready — syncing account, config and modes.");
-        installGameRuntimeCompatibility();
-
-        try{
-          Promise.resolve(window.sendConfig?window.sendConfig():false)
-            .catch(function(e){
-              console.warn("[1V1.LOLNOW] Remote Config handoff failed:",e);
-            });
-        }catch(e){}
-
-        try{
-          var u=getRealAuth().currentUser;
-          if(u){
-            u.getIdToken(true).then(function(token){
-              window.ONEVONE_AUTH_TOKEN=token;
-              sendUnityAuthToken(token);
-              sendEntitlementsToUnity();
-            }).catch(function(e){
-              console.warn("[1V1.LOLNOW] Unity auth token sync failed:",e);
-            });
-          }
-        }catch(e){}
-
-        setTimeout(function(){
-          if(!gameInstance || typeof gameInstance.SendMessage!=="function")return;
-
-          try{
-            localStorage.setItem("LastUsedMode","1v1");
-            sessionStorage.setItem("LastUsedMode","1v1");
-          }catch(e){}
-
-          window.dispatchEvent(new CustomEvent("onevone:modes-ready",{
-            detail:{
-              allModesUnlocked:true,
-              enabledModes:ALL_GAME_MODES.slice()
-            }
-          }));
-        },1000);
-      };
-    }catch(e){
-      console.error(e);
-      gameStarted=false;
-      showGameError(e&&e.message?e.message:"Unity failed to initialize.");
-    }
+    // The original Unity CDN is unavailable. Load a live community-maintained
+    // browser version instead of initializing a missing Unity build.
+    var container=$("gameContainer");
+    container.innerHTML="";
+    var frame=document.createElement("iframe");
+    frame.id="playableGameFrame";
+    frame.title="1v1.LOL Reloaded browser game";
+    frame.src="https://1v1lolreloaded.com/";
+    frame.allow="fullscreen; autoplay; gamepad; clipboard-read; clipboard-write";
+    frame.allowFullscreen=true;
+    frame.referrerPolicy="strict-origin-when-cross-origin";
+    frame.style.cssText="position:absolute;inset:0;width:100%;height:100%;border:0;background:#05070b";
+    container.appendChild(frame);
   }
 
   function showGameError(message){
@@ -1915,6 +1819,7 @@ h3{font-size:13px}
     });
 
     $("googleBtn").onclick=google;
+    $("playNowBtn").onclick=function(){startGame();};
 
     $("fullscreenButton").onclick=enterGameFullscreen;
     document.addEventListener("fullscreenchange",function(){
