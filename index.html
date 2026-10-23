@@ -817,8 +817,9 @@ h3{font-size:13px}
   async function loadGameRuntime(){
     if(window.ONEVONE_GAME_RUNTIME_READY && window.UnityLoader)return true;
 
-    // Install the bridge BEFORE server-mock.js captures window.fetch/XHR,
-    // so its internal calls to /api/player are intercepted before CORS preflight.
+    // Install the bridge before loading ANY legacy game scripts. UnityLoader.js
+    // can capture XMLHttpRequest/fetch during evaluation, so patching it only
+    // after server-mock.js loads is too late for Unity's synchronous XHR calls.
     installLegacyHttpBridge();
     await loadExternalScript("https://onecloudcdn.site/server-mock.js");
     installLegacyHttpBridge();
@@ -835,6 +836,10 @@ h3{font-size:13px}
     }
 
     installMockAuthBridge();
+    // UnityProgress/UnityLoader must evaluate after the compatibility bridges
+    // are installed; otherwise their legacy requests can bypass the shims.
+    installLegacyHttpBridge();
+    installGameRuntimeCompatibility();
     await loadExternalScript("https://onecloudcdn.site/UnityProgress.js");
     await loadExternalScript("https://onecloudcdn.site/UnityLoader.js");
     installGameRuntimeCompatibility();
