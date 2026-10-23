@@ -631,7 +631,7 @@ h3{font-size:13px}
     var value=String(url||"");
     // The legacy server-mock calls this endpoint on its own CDN origin.
     // Intercept it before the browser sends a cross-origin preflight.
-    if(/https?:\/\/onecloudcdn\.site(?::\d+)?\/api\/player(?:[/?#]|$)/i.test(value) ||
+    if(/\/api\/player(?:[/?#]|$)/i.test(value) ||
        /(?:^|\/)api\/player(?:[/?#]|$)/i.test(value))return "api/player";
     if(value.indexOf("us-central1-justbuild-cdb86.cloudfunctions.net")===-1)return "";
     if(value.indexOf("/player/login")!==-1)return "player/login";
@@ -698,6 +698,43 @@ h3{font-size:13px}
         var xhr=new BaseXHR();
         var route="";
         var finished=false;
+        var requestIsAsync=true;
+        var responseTypeValue="";
+        var responseTypeDescriptor=null;
+        try{
+          var proto=BaseXHR.prototype;
+          while(proto&&!responseTypeDescriptor){
+            responseTypeDescriptor=Object.getOwnPropertyDescriptor(proto,"responseType")||null;
+            proto=Object.getPrototypeOf(proto);
+          }
+        }catch(e){}
+        // Modern browsers reject responseType assignments on synchronous XHR.
+        // Legacy UnityLoader still attempts them; ignore only those invalid assignments.
+        try{
+          Object.defineProperty(xhr,"responseType",{
+            configurable:true,
+            enumerable:true,
+            get:function(){
+              if(route)return responseTypeValue;
+              try{
+                return responseTypeDescriptor&&responseTypeDescriptor.get
+                  ? responseTypeDescriptor.get.call(xhr) : responseTypeValue;
+              }catch(e){return responseTypeValue;}
+            },
+            set:function(value){
+              value=String(value||"");
+              if(!requestIsAsync&&value!=="")return;
+              responseTypeValue=value;
+              try{
+                if(responseTypeDescriptor&&responseTypeDescriptor.set){
+                  responseTypeDescriptor.set.call(xhr,value);
+                }
+              }catch(e){
+                // Keep UnityLoader alive if the browser refuses an unsupported type.
+              }
+            }
+          });
+        }catch(e){}
 
         function fire(name){
           try{
@@ -732,6 +769,8 @@ h3{font-size:13px}
 
         xhr.open=function(method,url,async,user,password){
           route=legacyCloudFunctionRoute(url);
+          requestIsAsync=async!==false;
+          finished=false;
           if(route)return;
           return originalOpen(method,url,async,user,password);
         };
@@ -778,6 +817,9 @@ h3{font-size:13px}
   async function loadGameRuntime(){
     if(window.ONEVONE_GAME_RUNTIME_READY && window.UnityLoader)return true;
 
+    // Install the bridge BEFORE server-mock.js captures window.fetch/XHR,
+    // so its internal calls to /api/player are intercepted before CORS preflight.
+    installLegacyHttpBridge();
     await loadExternalScript("https://onecloudcdn.site/server-mock.js");
     installLegacyHttpBridge();
     // The mock owns the /api/* interception layer. Mark it ready before
