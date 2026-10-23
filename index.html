@@ -629,6 +629,10 @@ h3{font-size:13px}
 
   function legacyCloudFunctionRoute(url){
     var value=String(url||"");
+    // The legacy server-mock calls this endpoint on its own CDN origin.
+    // Intercept it before the browser sends a cross-origin preflight.
+    if(/https?:\/\/onecloudcdn\.site(?::\d+)?\/api\/player(?:[/?#]|$)/i.test(value) ||
+       /(?:^|\/)api\/player(?:[/?#]|$)/i.test(value))return "api/player";
     if(value.indexOf("us-central1-justbuild-cdb86.cloudfunctions.net")===-1)return "";
     if(value.indexOf("/player/login")!==-1)return "player/login";
     if(value.indexOf("/userSettings/time")!==-1)return "userSettings/time";
@@ -641,13 +645,14 @@ h3{font-size:13px}
     var user=buildLegacyGameUser();
     var session=window.ONEVONE_GAME_SESSION||{};
 
-    if(route==="player/login"){
+    if(route==="player/login" || route==="api/player"){
       return JSON.stringify({
         success:true,
         ok:true,
         token:session.token||"",
         player:user,
         data:user,
+        user:user,
         ID:user.ID,
         Nickname:user.Nickname,
         Rating:user.Rating,
