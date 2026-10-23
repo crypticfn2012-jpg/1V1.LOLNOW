@@ -841,8 +841,11 @@ h3{font-size:13px}
     // are installed; otherwise their legacy requests can bypass the shims.
     installLegacyHttpBridge();
     installGameRuntimeCompatibility();
-    await loadExternalScript("https://onecloudcdn.site/UnityProgress.js");
+    // Match the proven working 1v1.html dependency order: the Unity loader
+    // evaluates before the progress helper. The CDN loader expects its runtime
+    // globals to be established by the legacy bootstrap before it executes.
     await loadExternalScript("https://onecloudcdn.site/UnityLoader.js");
+    await loadExternalScript("https://onecloudcdn.site/UnityProgress.js");
     installGameRuntimeCompatibility();
 
     window.ONEVONE_GAME_RUNTIME_READY=true;
